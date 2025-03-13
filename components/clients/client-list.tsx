@@ -21,8 +21,14 @@ import { Plus, Search, MoreVertical, Edit, Trash2, Building2 } from "lucide-reac
 import { fetchClients, saveClient, deleteClient } from "@/lib/api"
 import type { Client } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 
-function ClientList() {
+interface ClientListProps {
+  hideActions?: boolean;
+}
+
+function ClientList({ hideActions = false }: ClientListProps) {
+  const router = useRouter()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<"grid" | "table">("grid")
@@ -133,31 +139,32 @@ function ClientList() {
     }
   }
 
+  const handleViewClient = (clientId: string) => {
+    router.push(`/dashboard/clients/${clientId}`)
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Clients</h1>
-          <p className="text-muted-foreground">Manage your organization's clients</p>
+      {!hideActions && (
+        <div className="flex items-center justify-between">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search clients..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "table")} className="hidden md:block">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="grid">Grid</TabsTrigger>
+              <TabsTrigger value="table">Table</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Client
-        </Button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search clients..."
-            className="pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
+      )}
 
       <Tabs value={view} onValueChange={(value) => setView(value as "grid" | "table")}>
         <TabsList className="grid w-full grid-cols-2">
@@ -191,7 +198,7 @@ function ClientList() {
               <p className="mt-2 text-center text-muted-foreground">
                 {searchQuery ? "Try adjusting your search" : "Get started by adding a new client"}
               </p>
-              {!searchQuery && (
+              {!searchQuery && !hideActions && (
                 <Button onClick={() => setIsAddDialogOpen(true)} className="mt-6">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Client
@@ -201,50 +208,65 @@ function ClientList() {
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredClients.map((client) => (
-                <Card key={client.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle>{client.name}</CardTitle>
-                        <CardDescription>Client ID: {client.id}</CardDescription>
+                <Card 
+                  key={client.id} 
+                  className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
+                  onClick={() => handleViewClient(client.id)}
+                >
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Building2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-xl">{client.name}</CardTitle>
+                        </div>
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setCurrentClient(client)
-                              setIsEditDialogOpen(true)
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => {
-                              setCurrentClient(client)
-                              setIsDeleteDialogOpen(true)
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {!hideActions && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentClient(client);
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentClient(client);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
+                    <CardDescription className="mt-2">
+                      <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">ID: {client.id}</span>
+                    </CardDescription>
                   </CardHeader>
-                  <CardFooter>
+                  <CardFooter className="bg-muted/30 pt-4">
                     <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setCurrentClient(client)
-                        setIsEditDialogOpen(true)
+                      variant="ghost"
+                      className="w-full text-primary hover:text-primary/80"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewClient(client.id);
                       }}
                     >
                       Manage Client
@@ -291,7 +313,11 @@ function ClientList() {
                   </TableRow>
                 ) : (
                   filteredClients.map((client) => (
-                    <TableRow key={client.id}>
+                    <TableRow 
+                      key={client.id}
+                      className="cursor-pointer"
+                      onClick={() => handleViewClient(client.id)}
+                    >
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell>{client.id}</TableCell>
                       <TableCell>

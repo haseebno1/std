@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { motion } from "framer-motion"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import type { Template } from "@/lib/types"
+import type { Template, Client, Brand } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { 
@@ -16,8 +16,12 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TemplatePreview } from "@/components/templates/template-preview"
+import { ImageUpload } from "@/components/ui/image-upload"
 import { toast } from "@/components/ui/use-toast"
 import { Save, Trash, Download } from "lucide-react"
+import { fetchClients, fetchBrands } from "@/lib/api"
+import { getDefaultTemplateSvgUrl } from "@/lib/utils"
+import { useSearchParams } from "next/navigation"
 
 const templateSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -25,28 +29,84 @@ const templateSchema = z.object({
   brandId: z.string(),
   layout: z.enum(["horizontal", "vertical"]),
   frontImage: z.string(),
+  backImage: z.string().optional(),
   // Add more fields as needed
 })
 
-export function TemplateForm({ initialTemplate }: { initialTemplate: Template | undefined }) {
+export function TemplateForm({ 
+  initialTemplate, 
+  onSubmit: externalSubmit 
+}: { 
+  initialTemplate: Template | undefined;
+  onSubmit?: (template: Template) => void;
+}) {
+  const searchParams = useSearchParams()
+  const clientParam = searchParams.get('client')
+  const brandParam = searchParams.get('brand')
+  
   const [preview, setPreview] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [clients, setClients] = useState<Client[]>([])
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeImageTab, setActiveImageTab] = useState("front")
   
   const form = useForm<z.infer<typeof templateSchema>>({
     resolver: zodResolver(templateSchema),
     defaultValues: initialTemplate || {
       name: "",
-      clientId: "",
-      brandId: "",
+      clientId: clientParam || "",
+      brandId: brandParam || "",
       layout: "horizontal",
-      frontImage: "/placeholder.svg?height=300&width=500",
+      frontImage: getDefaultTemplateSvgUrl(),
+      backImage: "",
     },
   })
+  
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const [clientsData, brandsData] = await Promise.all([
+          fetchClients(),
+          fetchBrands()
+        ])
+        setClients(clientsData)
+        setBrands(brandsData)
+      } catch (error) {
+        console.error("Error loading data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [])
+  
+  // Filter brands based on selected client
+  const filteredBrands = brands.filter(brand => 
+    !form.watch("clientId") || brand.clientId === form.watch("clientId")
+  )
   
   const onSubmit = async (data: z.infer<typeof templateSchema>) => {
     try {
       setSaving(true)
-      // Simulate API call
+      
+      // Create a complete template object
+      const completeTemplate: Template = {
+        ...(initialTemplate || {}),
+        ...data,
+        id: initialTemplate?.id || `template-${Date.now()}`,
+        customFields: initialTemplate?.customFields || [],
+      }
+      
+      // Call external submit handler if provided
+      if (externalSubmit) {
+        externalSubmit(completeTemplate)
+        return
+      }
+      
+      // Simulate API call if no external handler
       await new Promise(resolve => setTimeout(resolve, 1500))
       
       toast({
@@ -123,8 +183,12 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                         <FormItem>
                           <FormLabel>Client</FormLabel>
                           <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
+                            onValueChange={(value) => {
+                              field.onChange(value)
+                              // Reset brand when client changes
+                              form.setValue("brandId", "")
+                            }}
+                            value={field.value || undefined}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -132,9 +196,17 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="client1">Acme Corporation</SelectItem>
-                              <SelectItem value="client2">Globex Inc.</SelectItem>
-                              <SelectItem value="client3">Umbrella Corp</SelectItem>
+                              {loading ? (
+                                <SelectItem value="loading" disabled>Loading clients...</SelectItem>
+                              ) : clients.length === 0 ? (
+                                <SelectItem value="none" disabled>No clients available</SelectItem>
+                              ) : (
+                                clients.map(client => (
+                                  <SelectItem key={client.id} value={client.id}>
+                                    {client.name}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -150,7 +222,8 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                           <FormLabel>Brand</FormLabel>
                           <Select
                             onValueChange={field.onChange}
-                            defaultValue={field.value}
+                            value={field.value || undefined}
+                            disabled={!form.watch("clientId")}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -158,9 +231,19 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="brand1">Corporate</SelectItem>
-                              <SelectItem value="brand2">Marketing</SelectItem>
-                              <SelectItem value="brand3">IT Department</SelectItem>
+                              {loading ? (
+                                <SelectItem value="loading" disabled>Loading brands...</SelectItem>
+                              ) : !form.watch("clientId") ? (
+                                <SelectItem value="none" disabled>Select a client first</SelectItem>
+                              ) : filteredBrands.length === 0 ? (
+                                <SelectItem value="none" disabled>No brands available for this client</SelectItem>
+                              ) : (
+                                filteredBrands.map(brand => (
+                                  <SelectItem key={brand.id} value={brand.id}>
+                                    {brand.name}
+                                  </SelectItem>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -197,16 +280,53 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                 
                 <Card className="h-fit">
                   <CardHeader>
-                    <CardTitle>Preview Image</CardTitle>
+                    <CardTitle>Card Design</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="border rounded-md overflow-hidden">
-                      <img 
-                        src={form.watch("frontImage")} 
-                        alt="Template Preview" 
-                        className="w-full h-auto aspect-video object-cover"
-                      />
-                    </div>
+                  <CardContent className="space-y-4">
+                    <Tabs value={activeImageTab} onValueChange={setActiveImageTab} className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="front">Front Side</TabsTrigger>
+                        <TabsTrigger value="back">Back Side</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="front" className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="frontImage"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Front Image</FormLabel>
+                              <FormControl>
+                                <ImageUpload
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  onRemove={() => field.onChange(getDefaultTemplateSvgUrl())}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TabsContent>
+                      <TabsContent value="back" className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="backImage"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Back Image</FormLabel>
+                              <FormControl>
+                                <ImageUpload
+                                  value={field.value || ""}
+                                  onChange={field.onChange}
+                                  onRemove={() => field.onChange("")}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </TabsContent>
+                    </Tabs>
                   </CardContent>
                 </Card>
               </div>
@@ -254,6 +374,7 @@ export function TemplateForm({ initialTemplate }: { initialTemplate: Template | 
                   brandId: form.watch("brandId"),
                   layout: form.watch("layout"),
                   frontImage: form.watch("frontImage"),
+                  backImage: form.watch("backImage"),
                   customFields: initialTemplate?.customFields || [],
                 }}
               />

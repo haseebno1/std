@@ -1,12 +1,11 @@
 "use client"
 
-import { useRef, useEffect, useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useState } from "react"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Download, Printer } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Download, Loader2 } from "lucide-react"
 import type { Template, EmployeeData } from "@/lib/types"
-import { generatePDF } from "@/lib/pdf-generator"
-import { toast } from "@/hooks/use-toast"
 
 interface CardPreviewProps {
   template: Template
@@ -14,224 +13,127 @@ interface CardPreviewProps {
 }
 
 export function CardPreview({ template, employeeData }: CardPreviewProps) {
-  const frontCanvasRef = useRef<HTMLCanvasElement>(null)
-  const backCanvasRef = useRef<HTMLCanvasElement>(null)
-  const [activeTab, setActiveTab] = useState("front")
-  const [isGenerating, setIsGenerating] = useState(false)
-
-  useEffect(() => {
-    const renderCard = async (side: "front" | "back") => {
-      const canvasRef = side === "front" ? frontCanvasRef : backCanvasRef
-      const canvas = canvasRef.current
-      if (!canvas) return
-
-      const ctx = canvas.getContext("2d")
-      if (!ctx) return
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-      // Load template image safely
-      const templateImageSrc = side === "front" ? template.frontImage : template.backImage || ""
-
-      // Only proceed with image loading on the client side
-      if (typeof window !== "undefined") {
-        const templateImage = document.createElement("img")
-        templateImage.crossOrigin = "anonymous"
-        templateImage.src = templateImageSrc
-
-        templateImage.onload = () => {
-          // Set canvas dimensions based on template image
-          canvas.width = templateImage.width
-          canvas.height = templateImage.height
-
-          // Draw template image
-          ctx.drawImage(templateImage, 0, 0, canvas.width, canvas.height)
-
-          // Draw fields on the canvas
-          const fieldsForSide = template.customFields.filter((field) => field.side === side)
-
-          fieldsForSide.forEach(async (field) => {
-            const value = employeeData[field.id]
-            if (!value) return
-
-            if (field.type === "image" && typeof value === "string") {
-              // Draw image field
-              const img = document.createElement("img")
-              img.crossOrigin = "anonymous"
-              img.src = value
-              img.onload = () => {
-                // Draw image at specified position with specified dimensions
-                ctx.drawImage(
-                  img,
-                  field.position.x,
-                  field.position.y,
-                  field.style?.width || 100,
-                  field.style?.height || 100,
-                )
-              }
-              img.onerror = () => {
-                console.error(`Failed to load image for field ${field.id}`)
-              }
-            } else {
-              // Draw text field
-              ctx.font = `${field.style?.fontWeight || ""} ${field.style?.fontSize || "16px"} ${field.style?.fontFamily || "Arial"}`
-              ctx.fillStyle = field.style?.color || "#000000"
-              ctx.textAlign = (field.style?.textAlign as CanvasTextAlign) || "left"
-
-              if (field.type === "date" && value instanceof Date) {
-                ctx.fillText(value.toLocaleDateString(), field.position.x, field.position.y)
-              } else if (typeof value === "string") {
-                // Handle multiline text for textarea
-                if (field.type === "textarea") {
-                  const lineHeight = Number.parseInt(field.style?.fontSize || "16px") * 1.2
-                  const lines = value.split("\n")
-                  lines.forEach((line, index) => {
-                    ctx.fillText(line, field.position.x, field.position.y + index * lineHeight)
-                  })
-                } else {
-                  ctx.fillText(value, field.position.x, field.position.y)
-                }
-              }
-            }
-          })
-        }
-
-        templateImage.onerror = () => {
-          console.error(`Failed to load template image for ${side} side`)
-          // Draw a placeholder rectangle
-          canvas.width = 500
-          canvas.height = 300
-          ctx.fillStyle = "#f0f0f0"
-          ctx.fillRect(0, 0, canvas.width, canvas.height)
-          ctx.fillStyle = "#999"
-          ctx.font = "16px Arial"
-          ctx.textAlign = "center"
-          ctx.fillText(`Template image not available (${side} side)`, canvas.width / 2, canvas.height / 2)
-        }
-      }
-    }
-
-    renderCard("front")
-    if (template.backImage) {
-      renderCard("back")
-    }
-  }, [template, employeeData])
+  const [downloading, setDownloading] = useState(false)
 
   const handleDownload = async () => {
-    setIsGenerating(true)
+    setDownloading(true)
     try {
-      await generatePDF(template, employeeData, frontCanvasRef.current, backCanvasRef.current)
-      toast({
-        title: "Success",
-        description: "Card downloaded successfully",
-      })
+      // TODO: Implement card download logic
+      await new Promise(resolve => setTimeout(resolve, 2000))
     } catch (error) {
-      console.error("Error generating PDF:", error)
-      toast({
-        title: "Error",
-        description: "Failed to generate PDF",
-        variant: "destructive",
-      })
+      console.error("Error downloading card:", error)
     } finally {
-      setIsGenerating(false)
+      setDownloading(false)
     }
   }
 
-  const handlePrint = () => {
-    const printWindow = window.open("", "_blank")
-    if (!printWindow) {
-      toast({
-        title: "Error",
-        description: "Could not open print window. Please check your popup settings.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const frontCanvas = frontCanvasRef.current
-    if (!frontCanvas) return
-
-    const backCanvas = backCanvasRef.current
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Print Card</title>
-          <style>
-            body {
-              margin: 0;
-              padding: 20px;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 20px;
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-              page-break-after: always;
-            }
-            @media print {
-              button {
-                display: none;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <button onclick="window.print()">Print</button>
-          <img src="${frontCanvas.toDataURL("image/png")}" alt="Front of card" />
-          ${backCanvas ? `<img src="${backCanvas.toDataURL("image/png")}" alt="Back of card" />` : ""}
-        </body>
-      </html>
-    `)
-
-    printWindow.document.close()
+  const formatFieldValue = (value: string | Date | null): string => {
+    if (!value) return ""
+    if (value instanceof Date) return value.toLocaleDateString()
+    return value
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-semibold">Card Preview</h2>
-          <p className="text-muted-foreground">Preview how the employee card will look</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-          <Button onClick={handleDownload} disabled={isGenerating}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-medium">Card Preview</h2>
+        <Button 
+          onClick={handleDownload} 
+          disabled={downloading}
+        >
+          {downloading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
             <Download className="mr-2 h-4 w-4" />
-            {isGenerating ? "Generating..." : "Download PDF"}
+              Download Card
+            </>
+          )}
           </Button>
-        </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="front">Front</TabsTrigger>
-          <TabsTrigger value="back" disabled={!template.backImage}>
-            Back
-          </TabsTrigger>
-        </TabsList>
+      <div className="grid gap-6 md:grid-cols-2">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <div 
+                className="aspect-[1.586/1] relative bg-muted"
+                style={{
+                  backgroundImage: `url(${template.frontImage || "/placeholder.svg"})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }}
+              >
+                {/* Render front side field values */}
+                {template.customFields
+                  .filter(field => field.side === "front")
+                  .map(field => (
+                    <div
+                      key={field.id}
+                      className="absolute"
+                      style={{
+                        top: `${field.position.y}%`,
+                        left: `${field.position.x}%`,
+                        transform: "translate(-50%, -50%)",
+                        color: field.style?.color || "#000000",
+                        fontSize: `${field.style?.fontSize || 16}px`,
+                        fontWeight: field.style?.fontWeight || "normal",
+                      }}
+                    >
+                      {formatFieldValue(employeeData[field.id])}
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <TabsContent value="front" className="pt-4">
-          <div className={`mx-auto ${template.layout === "horizontal" ? "max-w-md" : "max-w-sm"}`}>
-            <canvas ref={frontCanvasRef} className="w-full h-auto border rounded-md shadow-sm" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <div 
+                className="aspect-[1.586/1] relative bg-muted"
+                style={{
+                  backgroundImage: `url(${template.backImage || "/placeholder.svg"})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }}
+              >
+                {/* Render back side field values */}
+                {template.customFields
+                  .filter(field => field.side === "back")
+                  .map(field => (
+                    <div
+                      key={field.id}
+                      className="absolute"
+                      style={{
+                        top: `${field.position.y}%`,
+                        left: `${field.position.x}%`,
+                        transform: "translate(-50%, -50%)",
+                        color: field.style?.color || "#000000",
+                        fontSize: `${field.style?.fontSize || 16}px`,
+                        fontWeight: field.style?.fontWeight || "normal",
+                      }}
+                    >
+                      {formatFieldValue(employeeData[field.id])}
+                    </div>
+                  ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="back" className="pt-4">
-          {template.backImage && (
-            <div className={`mx-auto ${template.layout === "horizontal" ? "max-w-md" : "max-w-sm"}`}>
-              <canvas ref={backCanvasRef} className="w-full h-auto border rounded-md shadow-sm" />
+            </CardContent>
+          </Card>
+        </motion.div>
             </div>
-          )}
-        </TabsContent>
-      </Tabs>
     </div>
   )
 }

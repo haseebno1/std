@@ -23,8 +23,13 @@ import { Plus, Search, MoreVertical, Edit, Copy, Trash2, FileIcon as FileTemplat
 import { fetchTemplates, fetchClients, fetchBrands, deleteTemplate } from "@/lib/api"
 import type { Template, Client, Brand } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
+import { getDefaultTemplateSvgUrl } from "@/lib/utils"
 
-function TemplateList() {
+interface TemplateListProps {
+  hideActions?: boolean;
+}
+
+function TemplateList({ hideActions = false }: TemplateListProps) {
   const router = useRouter()
   const [templates, setTemplates] = useState<Template[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -96,8 +101,8 @@ function TemplateList() {
     console.log("List: Navigating to edit template with ID:", templateId)
     console.log("List: Type of templateId:", typeof templateId)
 
-    // Use direct navigation with the router to ensure proper ID handling
-    router.push(`/dashboard/templates/${encodeURIComponent(templateId)}`)
+    // Use the template editor with the template ID
+    router.push(`/dashboard/templates/editor?id=${encodeURIComponent(templateId)}`)
   }
 
   const getClientName = (clientId: string) => {
@@ -112,18 +117,36 @@ function TemplateList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      {!hideActions && (
+        <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Templates</h1>
-          <p className="text-muted-foreground">Manage your card templates</p>
+          <div className="flex items-center gap-2">
+            <Button asChild>
+              <Link href="/dashboard/templates/new">
+                <Plus className="mr-2 h-4 w-4" />
+                New Template
+              </Link>
+            </Button>
+            <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "table")} className="hidden md:block">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="grid">Grid</TabsTrigger>
+                <TabsTrigger value="table">Table</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/templates/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Template
-          </Link>
-        </Button>
-      </div>
+      )}
+
+      {hideActions && (
+        <div className="flex items-center justify-between">
+          <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "table")} className="hidden md:block">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="grid">Grid</TabsTrigger>
+              <TabsTrigger value="table">Table</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -226,9 +249,12 @@ function TemplateList() {
                   <CardHeader className="p-0">
                     <div className="aspect-[1.5/1] bg-gray-100 dark:bg-gray-800 overflow-hidden">
                       <img
-                        src={template.frontImage || "/placeholder.svg"}
+                        src={template.frontImage}
                         alt={template.name}
-                        className="h-full w-full object-cover"
+                        className="w-full h-32 object-cover rounded-t-md"
+                        onError={(e) => {
+                          e.currentTarget.src = getDefaultTemplateSvgUrl();
+                        }}
                       />
                     </div>
                   </CardHeader>
@@ -244,6 +270,7 @@ function TemplateList() {
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
                             <MoreVertical className="h-4 w-4" />
+                            <span className="sr-only">Open menu</span>
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -256,11 +283,11 @@ function TemplateList() {
                             Duplicate
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
                             onClick={() => {
                               setTemplateToDelete(template.id)
                               setDeleteDialogOpen(true)
                             }}
+                            className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
@@ -268,17 +295,7 @@ function TemplateList() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                    <div className="mt-2 flex items-center text-sm text-muted-foreground">
-                      <span className="capitalize">{template.layout}</span>
-                      <span className="mx-2">•</span>
-                      <span>{template.customFields.length} fields</span>
-                    </div>
                   </CardContent>
-                  <CardFooter className="p-4 pt-0">
-                    <Button variant="outline" className="w-full" onClick={() => handleEditTemplate(template.id)}>
-                      Edit Template
-                    </Button>
-                  </CardFooter>
                 </Card>
               ))}
             </div>
@@ -286,63 +303,75 @@ function TemplateList() {
         </TabsContent>
 
         <TabsContent value="table">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Brand</TableHead>
-                  <TableHead>Layout</TableHead>
-                  <TableHead>Fields</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array(5)
-                    .fill(0)
-                    .map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-5 w-[180px]" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-[150px]" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-[150px]" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-[100px]" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-[50px]" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-9 w-9" />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                ) : filteredTemplates.length === 0 ? (
+          {loading ? (
+            <div className="w-full">
+              <Skeleton className="h-12 w-full mb-2" />
+              {Array(5)
+                .fill(0)
+                .map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full mb-2" />
+                ))}
+            </div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
+                <FileTemplate className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className="mt-6 text-xl font-semibold">No templates found</h2>
+              <p className="mt-2 text-center text-muted-foreground">
+                {searchQuery || selectedClient || selectedBrand
+                  ? "Try adjusting your search or filters"
+                  : "Get started by creating a new template"}
+              </p>
+              {!searchQuery && !selectedClient && !selectedBrand && (
+                <Button asChild className="mt-6">
+                  <Link href="/dashboard/templates/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Template
+                  </Link>
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
-                      No templates found
-                    </TableCell>
+                    <TableHead className="w-[80px]">Preview</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Brand</TableHead>
+                    <TableHead>Layout</TableHead>
+                    <TableHead>Fields</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredTemplates.map((template) => (
+                </TableHeader>
+                <TableBody>
+                  {filteredTemplates.map((template) => (
                     <TableRow key={template.id}>
+                      <TableCell>
+                        <div className="h-10 w-16 overflow-hidden rounded-md border">
+                          <img
+                            src={template.frontImage}
+                            alt={template.name}
+                            className="w-16 h-16 object-cover rounded-md"
+                            onError={(e) => {
+                              e.currentTarget.src = getDefaultTemplateSvgUrl();
+                            }}
+                          />
+                        </div>
+                      </TableCell>
                       <TableCell className="font-medium">{template.name}</TableCell>
                       <TableCell>{getClientName(template.clientId)}</TableCell>
                       <TableCell>{getBrandName(template.brandId)}</TableCell>
                       <TableCell className="capitalize">{template.layout}</TableCell>
                       <TableCell>{template.customFields.length}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon">
                               <MoreVertical className="h-4 w-4" />
+                              <span className="sr-only">Open menu</span>
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -355,11 +384,11 @@ function TemplateList() {
                               Duplicate
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
                               onClick={() => {
                                 setTemplateToDelete(template.id)
                                 setDeleteDialogOpen(true)
                               }}
+                              className="text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -368,11 +397,11 @@ function TemplateList() {
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

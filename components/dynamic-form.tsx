@@ -16,6 +16,7 @@ import { CalendarIcon, Upload, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Template, EmployeeData, CustomField } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
+import { ImageUpload } from "@/components/ui/image-upload"
 
 interface DynamicFormProps {
   template: Template
@@ -42,12 +43,23 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
     }
   })
 
-  // Dynamically build the form schema based on template fields
-  const formSchema = buildFormSchema(template.customFields)
+  // Create a dynamic schema based on template fields
+  const formSchema = z.object(
+    template.customFields.reduce((acc, field) => {
+      if (field.type === "image") {
+        acc[field.id] = z.string().nullable()
+      } else if (field.type === "textarea") {
+        acc[field.id] = z.string().min(1, "This field is required")
+      } else {
+        acc[field.id] = z.string().min(1, "This field is required")
+      }
+      return acc
+    }, {} as { [key: string]: z.ZodType<any> })
+  )
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: initialData as any,
+    defaultValues: initialData,
   })
 
   const handleImageChange = (fieldId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,18 +108,8 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
     form.setValue(fieldId as any, null)
   }
 
-  const handleSubmit = (values: z.infer<typeof formSchema>) => {
-    // Combine form values with image files
-    const formData: EmployeeData = { ...values }
-
-    // Add image files to the form data
-    Object.keys(imagePreviewUrls).forEach((fieldId) => {
-      if (imagePreviewUrls[fieldId]) {
-        formData[fieldId] = imagePreviewUrls[fieldId]
-      }
-    })
-
-    onSubmit(formData)
+  const handleSubmit = (data: z.infer<typeof formSchema>) => {
+    onSubmit(data)
   }
 
   // Group fields by side (front/back)
@@ -122,7 +124,7 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
+        <form id="employee-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
           {frontFields.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Front Side Fields</h3>
@@ -131,14 +133,31 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
                   <FormField
                     key={field.id}
                     control={form.control}
-                    name={field.id as any}
+                    name={field.id}
                     render={({ field: formField }) => (
                       <FormItem>
                         <FormLabel>
                           {field.name} {field.required && <span className="text-destructive">*</span>}
                         </FormLabel>
                         <FormControl>
-                          {renderFieldInput(field, formField, handleImageChange, imagePreviewUrls, handleRemoveImage)}
+                          {field.type === "textarea" ? (
+                            <Textarea
+                              {...formField}
+                              placeholder={`Enter ${field.name.toLowerCase()}`}
+                            />
+                          ) : field.type === "image" ? (
+                            <ImageUpload
+                              value={formField.value}
+                              onChange={formField.onChange}
+                              onRemove={() => formField.onChange(null)}
+                            />
+                          ) : (
+                            <Input
+                              {...formField}
+                              type={field.type}
+                              placeholder={`Enter ${field.name.toLowerCase()}`}
+                            />
+                          )}
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -157,14 +176,31 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
                   <FormField
                     key={field.id}
                     control={form.control}
-                    name={field.id as any}
+                    name={field.id}
                     render={({ field: formField }) => (
                       <FormItem>
                         <FormLabel>
                           {field.name} {field.required && <span className="text-destructive">*</span>}
                         </FormLabel>
                         <FormControl>
-                          {renderFieldInput(field, formField, handleImageChange, imagePreviewUrls, handleRemoveImage)}
+                          {field.type === "textarea" ? (
+                            <Textarea
+                              {...formField}
+                              placeholder={`Enter ${field.name.toLowerCase()}`}
+                            />
+                          ) : field.type === "image" ? (
+                            <ImageUpload
+                              value={formField.value}
+                              onChange={formField.onChange}
+                              onRemove={() => formField.onChange(null)}
+                            />
+                          ) : (
+                            <Input
+                              {...formField}
+                              type={field.type}
+                              placeholder={`Enter ${field.name.toLowerCase()}`}
+                            />
+                          )}
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -182,118 +218,5 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
       </Form>
     </div>
   )
-}
-
-function buildFormSchema(fields: CustomField[]) {
-  const shape: Record<string, z.ZodTypeAny> = {}
-
-  fields.forEach((field) => {
-    let validator: z.ZodTypeAny
-
-    switch (field.type) {
-      case "text":
-      case "image":
-        validator = field.required
-          ? z.string().min(1, { message: `${field.name} is required` })
-          : z.string().optional().nullable()
-        break
-      case "textarea":
-        validator = field.required
-          ? z.string().min(1, { message: `${field.name} is required` })
-          : z.string().optional().nullable()
-        break
-      case "date":
-        validator = field.required
-          ? z.date({ required_error: `${field.name} is required` })
-          : z.date().optional().nullable()
-        break
-      default:
-        validator = z.string().optional().nullable()
-    }
-
-    shape[field.id] = validator
-  })
-
-  return z.object(shape)
-}
-
-function renderFieldInput(
-  field: CustomField,
-  formField: any,
-  handleImageChange: (fieldId: string, e: React.ChangeEvent<HTMLInputElement>) => void,
-  imagePreviewUrls: Record<string, string>,
-  handleRemoveImage: (fieldId: string) => void,
-) {
-  switch (field.type) {
-    case "text":
-      return <Input {...formField} />
-
-    case "textarea":
-      return <Textarea {...formField} />
-
-    case "date":
-      return (
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn("w-full justify-start text-left font-normal", !formField.value && "text-muted-foreground")}
-            >
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {formField.value ? format(formField.value, "PPP") : <span>Pick a date</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
-            <Calendar mode="single" selected={formField.value} onSelect={formField.onChange} initialFocus />
-          </PopoverContent>
-        </Popover>
-      )
-
-    case "image":
-      return (
-        <div className="space-y-2">
-          {imagePreviewUrls[field.id] ? (
-            <div className="relative border rounded-md overflow-hidden">
-              <img
-                src={imagePreviewUrls[field.id] || "/placeholder.svg"}
-                alt="Preview"
-                className="w-full h-32 object-cover"
-              />
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon"
-                className="absolute top-2 right-2 h-6 w-6 rounded-full"
-                onClick={() => handleRemoveImage(field.id)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => document.getElementById(`file-${field.id}`)?.click()}
-                className="w-full"
-              >
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Image
-              </Button>
-              <input
-                id={`file-${field.id}`}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleImageChange(field.id, e)}
-              />
-            </div>
-          )}
-        </div>
-      )
-
-    default:
-      return <Input {...formField} />
-  }
 }
 

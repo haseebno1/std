@@ -18,12 +18,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Plus, Search, MoreVertical, Edit, Trash2, Briefcase } from "lucide-react"
+import { Plus, Search, MoreVertical, Edit, Trash2, Briefcase, Building2 } from "lucide-react"
 import { fetchBrands, fetchClients, saveBrand, deleteBrand } from "@/lib/api"
 import type { Brand, Client } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 
-function BrandList() {
+interface BrandListProps {
+  hideActions?: boolean;
+  clientFilter?: string;
+  hideClientColumn?: boolean;
+}
+
+function BrandList({ hideActions = false, clientFilter, hideClientColumn = false }: BrandListProps) {
+  const router = useRouter()
   const [brands, setBrands] = useState<Brand[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,9 +53,17 @@ function BrandList() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [brandsData, clientsData] = await Promise.all([fetchBrands(), fetchClients()])
+        const [brandsData, clientsData] = await Promise.all([
+          clientFilter ? fetchBrands(clientFilter) : fetchBrands(), 
+          fetchClients()
+        ])
         setBrands(brandsData)
         setClients(clientsData)
+        
+        // If a client filter is provided, set it as the selected client
+        if (clientFilter) {
+          setSelectedClient(clientFilter)
+        }
       } catch (error) {
         console.error("Error loading data:", error)
       } finally {
@@ -56,7 +72,7 @@ function BrandList() {
     }
 
     loadData()
-  }, [])
+  }, [clientFilter])
 
   const filteredBrands = brands.filter((brand) => {
     const matchesSearch = brand.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -80,8 +96,9 @@ function BrandList() {
     }
 
     try {
+      // Generate a unique ID using a more stable approach
       const brandToAdd: Brand = {
-        id: `brand-${Date.now()}`,
+        id: `brand-${newBrand.name.toLowerCase().replace(/\s+/g, '-')}-${Math.floor(Math.random() * 10000)}`,
         name: newBrand.name,
         clientId: newBrand.clientId,
       }
@@ -153,20 +170,15 @@ function BrandList() {
     }
   }
 
+  const handleViewBrand = (brandId: string) => {
+    router.push(`/dashboard/brands/${brandId}`)
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Brands</h1>
-          <p className="text-muted-foreground">Manage your organization's brands</p>
-        </div>
-        <Button onClick={() => setIsAddDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Brand
-        </Button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4">
+      {!hideActions && (
+        <>
+          <div className="flex items-center justify-between">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -177,7 +189,20 @@ function BrandList() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Select value={selectedClient || ""} onValueChange={(value) => setSelectedClient(value === "" ? null : value)}>
+            <Tabs value={view} onValueChange={(v) => setView(v as "grid" | "table")} className="hidden md:block">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="grid">Grid</TabsTrigger>
+                <TabsTrigger value="table">Table</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {!clientFilter && (
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Select
+                value={selectedClient || "all"}
+                onValueChange={(value) => setSelectedClient(value === "all" ? null : value)}
+              >
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="All Clients" />
           </SelectTrigger>
@@ -191,6 +216,9 @@ function BrandList() {
           </SelectContent>
         </Select>
       </div>
+          )}
+        </>
+      )}
 
       <Tabs value={view} onValueChange={(value) => setView(value as "grid" | "table")}>
         <TabsList className="grid w-full grid-cols-2">
@@ -226,7 +254,7 @@ function BrandList() {
                   ? "Try adjusting your search or filters"
                   : "Get started by adding a new brand"}
               </p>
-              {!searchQuery && !selectedClient && (
+              {!searchQuery && !selectedClient && !hideActions && (
                 <Button onClick={() => setIsAddDialogOpen(true)} className="mt-6">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Brand
@@ -236,24 +264,34 @@ function BrandList() {
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredBrands.map((brand) => (
-                <Card key={brand.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
+                <Card 
+                  key={brand.id} 
+                  className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
+                  onClick={() => handleViewBrand(brand.id)}
+                >
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Briefcase className="h-5 w-5" />
+                        </div>
                       <div>
-                        <CardTitle>{brand.name}</CardTitle>
-                        <CardDescription>Client: {getClientName(brand.clientId)}</CardDescription>
+                          <CardTitle className="text-xl">{brand.name}</CardTitle>
+                        </div>
                       </div>
+                      {!hideActions && (
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => {
-                              setCurrentBrand(brand)
-                              setIsEditDialogOpen(true)
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentBrand(brand);
+                                setIsEditDialogOpen(true);
                             }}
                           >
                             <Edit className="mr-2 h-4 w-4" />
@@ -261,9 +299,10 @@ function BrandList() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
-                            onClick={() => {
-                              setCurrentBrand(brand)
-                              setIsDeleteDialogOpen(true)
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentBrand(brand);
+                                setIsDeleteDialogOpen(true);
                             }}
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -271,15 +310,25 @@ function BrandList() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      )}
                     </div>
+                    <CardDescription className="mt-2 space-y-1">
+                      <span className="font-mono text-xs bg-muted px-1 py-0.5 rounded">ID: {brand.id}</span>
+                      {!hideClientColumn && (
+                        <div className="flex items-center mt-1">
+                          <Building2 className="h-3 w-3 mr-1 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">{getClientName(brand.clientId)}</span>
+                        </div>
+                      )}
+                    </CardDescription>
                   </CardHeader>
-                  <CardFooter>
+                  <CardFooter className="bg-muted/30 pt-4">
                     <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        setCurrentBrand(brand)
-                        setIsEditDialogOpen(true)
+                      variant="ghost"
+                      className="w-full text-primary hover:text-primary/80"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewBrand(brand.id);
                       }}
                     >
                       Manage Brand
@@ -297,9 +346,9 @@ function BrandList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Client</TableHead>
+                  {!hideClientColumn && <TableHead>Client</TableHead>}
                   <TableHead>ID</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -311,9 +360,11 @@ function BrandList() {
                         <TableCell>
                           <Skeleton className="h-5 w-[180px]" />
                         </TableCell>
+                        {!hideClientColumn && (
                         <TableCell>
                           <Skeleton className="h-5 w-[150px]" />
                         </TableCell>
+                        )}
                         <TableCell>
                           <Skeleton className="h-5 w-[150px]" />
                         </TableCell>
@@ -330,10 +381,14 @@ function BrandList() {
                   </TableRow>
                 ) : (
                   filteredBrands.map((brand) => (
-                    <TableRow key={brand.id}>
+                    <TableRow 
+                      key={brand.id}
+                      className="cursor-pointer"
+                      onClick={() => handleViewBrand(brand.id)}
+                    >
                       <TableCell className="font-medium">{brand.name}</TableCell>
-                      <TableCell>{getClientName(brand.clientId)}</TableCell>
-                      <TableCell>{brand.id}</TableCell>
+                      {!hideClientColumn && <TableCell>{getClientName(brand.clientId)}</TableCell>}
+                      <TableCell className="font-mono text-xs">{brand.id}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -393,18 +448,22 @@ function BrandList() {
             <div className="space-y-2">
               <Label htmlFor="brandClient">Client</Label>
               <Select
-                value={newBrand.clientId || ""}
-                onValueChange={(value) => setNewBrand({ ...newBrand, clientId: value })}
+                value={newBrand.clientId || "select-client"}
+                onValueChange={(value) => setNewBrand({ ...newBrand, clientId: value === "select-client" ? "" : value })}
               >
                 <SelectTrigger id="brandClient">
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((client) => (
+                  {clients.length === 0 ? (
+                    <SelectItem value="no-clients" disabled>No clients available</SelectItem>
+                  ) : (
+                    clients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.name}
                     </SelectItem>
-                  ))}
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -438,18 +497,22 @@ function BrandList() {
             <div className="space-y-2">
               <Label htmlFor="editBrandClient">Client</Label>
               <Select
-                value={currentBrand?.clientId || ""}
-                onValueChange={(value) => setCurrentBrand(currentBrand ? { ...currentBrand, clientId: value } : null)}
+                value={currentBrand?.clientId || "select-client"}
+                onValueChange={(value) => setCurrentBrand(currentBrand ? { ...currentBrand, clientId: value === "select-client" ? "" : value } : null)}
               >
                 <SelectTrigger id="editBrandClient">
                   <SelectValue placeholder="Select client" />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((client) => (
+                  {clients.length === 0 ? (
+                    <SelectItem value="no-clients" disabled>No clients available</SelectItem>
+                  ) : (
+                    clients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.name}
                     </SelectItem>
-                  ))}
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

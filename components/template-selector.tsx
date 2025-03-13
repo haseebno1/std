@@ -1,14 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { motion } from "framer-motion"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search } from "lucide-react"
+import { Search, LayoutTemplate } from "lucide-react"
 import type { Template } from "@/lib/types"
 import { fetchClients, fetchBrands, fetchTemplates } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 interface TemplateSelectorProps {
   onSelectClient: (clientId: string) => void
@@ -103,6 +105,21 @@ export function TemplateSelector({
     setFilteredTemplates(filtered)
   }, [searchQuery, templates])
 
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  }
+
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -123,7 +140,7 @@ export function TemplateSelector({
                 onSelectBrand("")
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select a client" />
               </SelectTrigger>
               <SelectContent>
@@ -147,7 +164,7 @@ export function TemplateSelector({
               onValueChange={(value) => onSelectBrand(value)}
               disabled={!selectedClient || brands.length === 0}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select a brand" />
               </SelectTrigger>
               <SelectContent>
@@ -168,7 +185,7 @@ export function TemplateSelector({
             <Input
               type="search"
               placeholder="Search templates..."
-              className="pl-8"
+              className="pl-8 bg-background"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               disabled={!selectedClient || !selectedBrand}
@@ -178,57 +195,83 @@ export function TemplateSelector({
       </div>
 
       {selectedClient && selectedBrand && (
-        <div className="mt-8">
+        <motion.div 
+          initial="hidden"
+          animate="show"
+          variants={container}
+          className="mt-8"
+        >
           <h3 className="text-lg font-medium mb-4">Available Templates</h3>
           {loading ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {Array(3)
                 .fill(0)
                 .map((_, i) => (
-                  <Skeleton key={i} className="h-64 rounded-lg" />
+                  <Skeleton key={i} className="aspect-[1.586/1] rounded-lg" />
                 ))}
             </div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="text-center p-8 border border-dashed rounded-lg">
-              <p className="text-muted-foreground">
-                {templates.length === 0
-                  ? "No templates found for the selected brand."
-                  : "No templates match your search criteria."}
-              </p>
-              {templates.length > 0 && (
-                <Button variant="outline" className="mt-4" onClick={() => setSearchQuery("")}>
-                  Clear Search
-                </Button>
-              )}
-            </div>
+            <Card className="bg-muted/10">
+              <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="rounded-full bg-primary/10 p-4 mb-4">
+                  <LayoutTemplate className="h-6 w-6 text-primary" />
+                </div>
+                <p className="text-muted-foreground mb-4">
+                  {templates.length === 0
+                    ? "No templates found for the selected brand."
+                    : "No templates match your search criteria."}
+                </p>
+                {templates.length > 0 && (
+                  <Button variant="outline" onClick={() => setSearchQuery("")}>
+                    Clear Search
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <motion.div 
+              className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+              variants={container}
+            >
               {filteredTemplates.map((template) => (
-                <Card
-                  key={template.id}
-                  className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
-                  onClick={() => onSelectTemplate(template)}
-                >
-                  <div className="aspect-[1.586/1] bg-gray-100 dark:bg-gray-800 overflow-hidden">
-                    <img
-                      src={template.frontImage || "/placeholder.svg"}
-                      alt={template.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <CardContent className="p-4">
-                    <h4 className="font-medium">{template.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {template.layout === "horizontal" ? "Horizontal" : "Vertical"} • {template.customFields.length}{" "}
-                      fields
-                    </p>
-                    <Button className="w-full mt-4">Select Template</Button>
-                  </CardContent>
-                </Card>
+                <motion.div key={template.id} variants={item}>
+                  <Card
+                    className={cn(
+                      "cursor-pointer transition-all duration-200 hover:shadow-lg",
+                      "group relative overflow-hidden border dark:bg-card"
+                    )}
+                    onClick={() => onSelectTemplate(template)}
+                  >
+                    <div className="aspect-[1.586/1] bg-muted/30 overflow-hidden">
+                      <motion.img
+                        src={template.frontImage || "/placeholder.svg"}
+                        alt={template.name}
+                        className="w-full h-full object-cover"
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ duration: 0.2 }}
+                      />
+                    </div>
+                    <CardContent className="p-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium truncate">{template.name}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {template.layout === "horizontal" ? "Horizontal" : "Vertical"} • {template.customFields.length}{" "}
+                          fields
+                        </p>
+                        <Button 
+                          className="w-full mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          variant="secondary"
+                        >
+                          Select Template
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       )}
     </div>
   )

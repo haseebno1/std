@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import type { Template, CustomField, Position } from "@/lib/types"
 import { Plus, Move, Trash2, Image, Type, CalendarDays, AlignLeft, Save, Eye } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
+import { getDefaultTemplateSvgUrl } from "@/lib/utils"
 
 interface TemplateEditorProps {
   initialTemplate?: Template
@@ -26,7 +27,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
       name: "New Template",
       clientId: "",
       brandId: "",
-      frontImage: "/placeholder.svg?height=300&width=500",
+      frontImage: getDefaultTemplateSvgUrl(),
       layout: "horizontal",
       customFields: [],
     },
@@ -403,7 +404,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
             <Eye className="mr-2 h-4 w-4" />
             {isPreviewMode ? "Edit Mode" : "Preview Mode"}
           </Button>
-          <Button onClick={handleSaveTemplate}>
+          <Button id="save-template-editor-btn" onClick={handleSaveTemplate}>
             <Save className="mr-2 h-4 w-4" />
             Save Template
           </Button>

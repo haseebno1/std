@@ -14,8 +14,8 @@ export function DashboardHeader() {
   const { setTheme, theme } = useTheme()
   
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center px-6">
+    <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-16 items-center px-4 md:px-6">
         <div className="flex flex-1 items-center gap-4 md:gap-8">
           <div className="relative hidden md:flex">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

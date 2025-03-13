@@ -25,7 +25,11 @@ import type { Employee, Template } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-function EmployeeList() {
+interface EmployeeListProps {
+  hideActions?: boolean;
+}
+
+function EmployeeList({ hideActions = false }: EmployeeListProps) {
   const router = useRouter()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -112,18 +116,20 @@ function EmployeeList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Employees</h1>
-          <p className="text-muted-foreground">Manage your employee records</p>
+      {!hideActions && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Employees</h1>
+            <p className="text-muted-foreground">Manage your employee records</p>
+          </div>
+          <Button asChild>
+            <Link href="/dashboard/employees/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Employee
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/employees/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Employee
-          </Link>
-        </Button>
-      </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
