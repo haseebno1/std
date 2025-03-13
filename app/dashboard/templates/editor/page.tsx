@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import type { Template } from "@/lib/types"
-import { fetchTemplateById, saveTemplate } from "@/lib/api"
+import { fetchTemplateById, createTemplate } from "@/lib/api"
+import { handleSupabaseError } from "@/lib/supabase"
 
 export default function TemplateEditorPage() {
   const router = useRouter()
@@ -28,7 +29,7 @@ export default function TemplateEditorPage() {
           console.error("Error loading template:", error)
           toast({
             title: "Error",
-            description: "Failed to load template data",
+            description: handleSupabaseError(error) || "Failed to load template data",
             variant: "destructive",
           })
           setLoading(false)
@@ -38,7 +39,27 @@ export default function TemplateEditorPage() {
 
   const handleSave = async (updatedTemplate: Template) => {
     try {
-      await saveTemplate(updatedTemplate)
+      // If we're editing an existing template, use the same ID
+      // otherwise let the API generate a new ID
+      const templateToSave = {
+        ...updatedTemplate,
+        // Ensure both naming conventions are present
+        client_id: updatedTemplate.clientId || updatedTemplate.client_id,
+        brand_id: updatedTemplate.brandId || updatedTemplate.brand_id,
+        front_image: updatedTemplate.frontImage || updatedTemplate.front_image,
+        back_image: updatedTemplate.backImage || updatedTemplate.back_image,
+        custom_fields: updatedTemplate.customFields || updatedTemplate.custom_fields || [],
+        // And in reverse
+        clientId: updatedTemplate.client_id || updatedTemplate.clientId,
+        brandId: updatedTemplate.brand_id || updatedTemplate.brandId, 
+        frontImage: updatedTemplate.front_image || updatedTemplate.frontImage,
+        backImage: updatedTemplate.back_image || updatedTemplate.backImage,
+        customFields: updatedTemplate.custom_fields || updatedTemplate.customFields || [],
+        updated_at: new Date().toISOString(),
+      };
+      
+      await createTemplate(templateToSave);
+      
       toast({
         title: "Success",
         description: "Template saved successfully",
@@ -48,7 +69,7 @@ export default function TemplateEditorPage() {
       console.error("Error saving template:", error)
       toast({
         title: "Error",
-        description: "Failed to save template",
+        description: handleSupabaseError(error) || "Failed to save template",
         variant: "destructive",
       })
     }

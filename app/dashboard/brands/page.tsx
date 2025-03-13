@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/use-toast"
-import { fetchBrands, fetchClients, saveBrand, deleteBrand } from "@/lib/api"
+import { fetchBrands, fetchClients, createBrand, deleteBrand } from "@/lib/api"
 import type { Brand, Client } from "@/lib/types"
 import { Plus, Briefcase } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
@@ -30,13 +30,7 @@ export default function BrandsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [currentBrand, setCurrentBrand] = useState<Brand | null>(null)
-  const [newBrand, setNewBrand] = useState<{
-    name: string
-    clientId: string
-  }>({
-    name: "",
-    clientId: clientParam || "",
-  })
+  const [newBrand, setNewBrand] = useState<{ name: string; client_id: string }>({ name: "", client_id: "" })
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [brands, setBrands] = useState<Brand[]>([])
@@ -70,7 +64,7 @@ export default function BrandsPage() {
   useEffect(() => {
     // If client param is present, set it in the new brand form
     if (clientParam) {
-      setNewBrand(prev => ({ ...prev, clientId: clientParam }))
+      setNewBrand(prev => ({ ...prev, client_id: clientParam }))
       setIsAddDialogOpen(true)
     }
     
@@ -94,7 +88,7 @@ export default function BrandsPage() {
   }, [clientParam, editParam])
   
   const handleAddBrand = async () => {
-    if (!newBrand.name.trim() || !newBrand.clientId) {
+    if (!newBrand.name.trim() || !newBrand.client_id) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -106,13 +100,15 @@ export default function BrandsPage() {
     try {
       // Generate a unique ID using a more stable approach
       const brandToAdd: Brand = {
-        id: `brand-${newBrand.name.toLowerCase().replace(/\s+/g, '-')}-${Math.floor(Math.random() * 10000)}`,
+        id: crypto.randomUUID(),
         name: newBrand.name,
-        clientId: newBrand.clientId,
+        client_id: newBrand.client_id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      await saveBrand(brandToAdd)
-      setNewBrand({ name: "", clientId: "" })
+      await createBrand(brandToAdd)
+      setNewBrand({ name: "", client_id: "" })
       setIsAddDialogOpen(false)
       toast({
         title: "Success",
@@ -133,7 +129,7 @@ export default function BrandsPage() {
   }
   
   const handleEditBrand = async () => {
-    if (!currentBrand || !currentBrand.name.trim() || !currentBrand.clientId) {
+    if (!currentBrand || !currentBrand.name.trim() || !currentBrand.client_id) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -143,7 +139,7 @@ export default function BrandsPage() {
     }
 
     try {
-      await saveBrand(currentBrand)
+      await createBrand(currentBrand)
       setIsEditDialogOpen(false)
       toast({
         title: "Success",
@@ -229,8 +225,8 @@ export default function BrandsPage() {
             <div className="space-y-2">
               <Label htmlFor="brandClient">Client</Label>
               <Select
-                value={newBrand.clientId || (clientParam ? clientParam : "select-client")}
-                onValueChange={(value) => setNewBrand({ ...newBrand, clientId: value === "select-client" ? "" : value })}
+                value={newBrand.client_id || (clientParam ? clientParam : "select-client")}
+                onValueChange={(value) => setNewBrand({ ...newBrand, client_id: value === "select-client" ? "" : value })}
                 disabled={!!clientParam}
               >
                 <SelectTrigger id="brandClient">
@@ -281,8 +277,8 @@ export default function BrandsPage() {
             <div className="space-y-2">
               <Label htmlFor="editBrandClient">Client</Label>
               <Select
-                value={currentBrand?.clientId || "select-client"}
-                onValueChange={(value) => setCurrentBrand(currentBrand ? { ...currentBrand, clientId: value === "select-client" ? "" : value } : null)}
+                value={currentBrand?.client_id || "select-client"}
+                onValueChange={(value) => setCurrentBrand(currentBrand ? { ...currentBrand, client_id: value === "select-client" ? "" : value } : null)}
               >
                 <SelectTrigger id="editBrandClient">
                   <SelectValue placeholder="Select client" />

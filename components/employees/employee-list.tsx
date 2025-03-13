@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,43 +27,79 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 interface EmployeeListProps {
   hideActions?: boolean;
+  initialEmployees?: Employee[];
 }
 
-function EmployeeList({ hideActions = false }: EmployeeListProps) {
+function EmployeeList({ hideActions = false, initialEmployees }: EmployeeListProps) {
   const router = useRouter()
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<Employee[]>(initialEmployees || [])
   const [templates, setTemplates] = useState<Template[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialEmployees)
   const [view, setView] = useState<"grid" | "table">("grid")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null)
 
+  // Add a cache reference to prevent repeated fetches
+  const fetchedRef = useRef(false);
+
   useEffect(() => {
+    // Avoid duplicate fetches
+    if (fetchedRef.current && !initialEmployees) return;
+    
     const loadData = async () => {
       try {
-        const [employeesData, templatesData] = await Promise.all([fetchEmployees(), fetchTemplates()])
-        setEmployees(employeesData)
-        setTemplates(templatesData)
+        // First load employees to ensure we have that data even if templates fail
+        if (!initialEmployees) {
+          try {
+            const employeesData = await fetchEmployees();
+            setEmployees(employeesData);
+          } catch (employeeError) {
+            console.error("Error loading employees:", employeeError);
+            toast({
+              title: "Error",
+              description: "Failed to load employee data",
+              variant: "destructive",
+            });
+          }
+        }
+        
+        // Fetch templates separately with error handling
+        try {
+          const templatesData = await fetchTemplates();
+          setTemplates(templatesData);
+        } catch (templateError: any) {
+          // Continue without templates - we'll just show "Unknown Template"
+          console.error("Template error:", templateError.message || "Unknown error");
+          setTemplates([]);
+        }
+        
+        setLoading(false);
+        fetchedRef.current = true;
       } catch (error) {
-        console.error("Error loading data:", error)
-      } finally {
-        setLoading(false)
+        console.error("Error in loadData:", error);
+        setLoading(false);
+        fetchedRef.current = true;
       }
     }
-
-    loadData()
-  }, [])
+    
+    loadData();
+  }, [initialEmployees]);
 
   const filteredEmployees = employees.filter((employee) => {
+    // Safety check for employee data
+    if (!employee.data) {
+      return false;
+    }
+    
     const matchesSearch =
-      employee.data.fullName?.toString().toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.data.employeeId?.toString().toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.data.department?.toString().toLowerCase().includes(searchQuery.toLowerCase()) ||
-      employee.data.jobTitle?.toString().toLowerCase().includes(searchQuery.toLowerCase())
+      searchQuery === "" || // If no search query, include all
+      getPrimaryName(employee).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getEmployeeId(employee).toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getEmployeePosition(employee).toLowerCase().includes(searchQuery.toLowerCase())
 
-    const matchesTemplate = !selectedTemplate || employee.templateId === selectedTemplate
+    const matchesTemplate = !selectedTemplate || employee.templateId === selectedTemplate || employee.template_id === selectedTemplate;
 
     return matchesSearch && matchesTemplate
   })
@@ -90,29 +126,103 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
     }
   }
 
-  const getTemplateName = (templateId: string) => {
-    const template = templates.find((t) => t.id === templateId)
-    return template ? template.name : "Unknown Template"
+  const getTemplateName = (templateId: string | undefined) => {
+    if (!templateId) return "Unknown Template";
+    const template = templates.find((t) => t.id === templateId);
+    return template ? template.name : "Unknown Template";
   }
+
+  // Find primary fields (name and photo) in employee data
+  const getPrimaryName = (employee: Employee) => {
+    // First check if there's a custom field with type "name"
+    const nameField = Object.entries(employee.data || {}).find(
+      ([key, value]) => {
+        const fieldKey = key.toLowerCase();
+        return fieldKey.includes('name') || 
+              fieldKey === 'fullname' || 
+              fieldKey === 'employee_name' ||
+              fieldKey === 'employeename';
+      }
+    );
+    
+    return nameField 
+      ? nameField[1]?.toString() 
+      : employee.data?.fullName?.toString() || "Unnamed Employee";
+  };
 
   const getEmployeePhoto = (employee: Employee) => {
     // Find photo field in employee data
-    const photoField = Object.entries(employee.data).find(
+    const photoField = Object.entries(employee.data || {}).find(
       ([key, value]) =>
-        typeof value === "string" && (value.startsWith("data:image") || key.toLowerCase().includes("photo")),
-    )
+        typeof value === "string" && 
+        (value.startsWith("data:image") || 
+         key.toLowerCase().includes("photo") || 
+         key.toLowerCase().includes("image") ||
+         key.toLowerCase().includes("picture")),
+    );
 
-    return photoField ? photoField[1] : null
-  }
+    return photoField ? photoField[1] : null;
+  };
 
   const getEmployeeInitials = (employee: Employee) => {
-    const fullName = employee.data.fullName?.toString() || ""
-    const nameParts = fullName.split(" ")
+    const fullName = getPrimaryName(employee);
+    const nameParts = fullName.split(" ");
     if (nameParts.length >= 2) {
-      return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase()
+      return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
     }
-    return fullName.substring(0, 2).toUpperCase()
-  }
+    return fullName.substring(0, 2).toUpperCase();
+  };
+
+  const getEmployeePosition = (employee: Employee) => {
+    // Look for position-related fields in a priority order
+    const positionKeys = ['jobTitle', 'job_title', 'position', 'role', 'department'];
+    
+    for (const key of positionKeys) {
+      if (employee.data?.[key]) {
+        return employee.data[key].toString();
+      }
+    }
+    
+    // Check for any key that might contain position-related terms
+    const positionField = Object.entries(employee.data || {}).find(
+      ([key, value]) => {
+        const fieldKey = key.toLowerCase();
+        return fieldKey.includes('title') || 
+               fieldKey.includes('position') || 
+               fieldKey.includes('role') ||
+               fieldKey.includes('department');
+      }
+    );
+    
+    return positionField 
+      ? positionField[1]?.toString() 
+      : "No position";
+  };
+
+  const getEmployeeId = (employee: Employee) => {
+    // Look for ID-related fields
+    const idKeys = ['employeeId', 'employee_id', 'id', 'badgeNumber', 'badge_number'];
+    
+    for (const key of idKeys) {
+      if (employee.data?.[key]) {
+        return employee.data[key].toString();
+      }
+    }
+    
+    // Check for any key that might contain ID-related terms
+    const idField = Object.entries(employee.data || {}).find(
+      ([key, value]) => {
+        const fieldKey = key.toLowerCase();
+        return fieldKey.includes('id') || 
+               fieldKey.includes('number') || 
+               fieldKey.includes('badge');
+      }
+    );
+    
+    return idField 
+      ? idField[1]?.toString() 
+      : "N/A";
+  };
 
   return (
     <div className="space-y-6">
@@ -218,16 +328,16 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                     <Avatar className="h-12 w-12">
                       <AvatarImage
                         src={getEmployeePhoto(employee) || ""}
-                        alt={employee.data.fullName?.toString() || ""}
+                        alt={getPrimaryName(employee)}
                       />
                       <AvatarFallback>{getEmployeeInitials(employee)}</AvatarFallback>
                     </Avatar>
                     <div className="space-y-1">
                       <CardTitle className="text-base">
-                        {employee.data.fullName?.toString() || "Unnamed Employee"}
+                        {getPrimaryName(employee)}
                       </CardTitle>
                       <CardDescription>
-                        {employee.data.jobTitle?.toString() || employee.data.department?.toString() || "No position"}
+                        {getEmployeePosition(employee)}
                       </CardDescription>
                     </div>
                     <DropdownMenu>
@@ -241,7 +351,7 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/dashboard/generate?employee=${employee.id}`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/employees/${employee.id}?tab=cards`)}>
                           <Printer className="mr-2 h-4 w-4" />
                           Generate Card
                         </DropdownMenuItem>
@@ -261,9 +371,9 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                   <CardContent>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div className="text-muted-foreground">Employee ID</div>
-                      <div>{employee.data.employeeId?.toString() || "N/A"}</div>
+                      <div>{getEmployeeId(employee)}</div>
                       <div className="text-muted-foreground">Template</div>
-                      <div>{getTemplateName(employee.templateId)}</div>
+                      <div>{getTemplateName(employee.templateId || employee.template_id)}</div>
                     </div>
                   </CardContent>
                   <CardFooter className="flex gap-2">
@@ -279,7 +389,7 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                     <Button
                       size="sm"
                       className="w-full"
-                      onClick={() => router.push(`/dashboard/generate?employee=${employee.id}`)}
+                      onClick={() => router.push(`/dashboard/employees/${employee.id}?tab=cards`)}
                     >
                       <Printer className="mr-2 h-4 w-4" />
                       Generate Card
@@ -343,20 +453,20 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                           <Avatar className="h-8 w-8">
                             <AvatarImage
                               src={getEmployeePhoto(employee) || ""}
-                              alt={employee.data.fullName?.toString() || ""}
+                              alt={getPrimaryName(employee)}
                             />
                             <AvatarFallback>{getEmployeeInitials(employee)}</AvatarFallback>
                           </Avatar>
                           <span className="font-medium">
-                            {employee.data.fullName?.toString() || "Unnamed Employee"}
+                            {getPrimaryName(employee)}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{employee.data.employeeId?.toString() || "N/A"}</TableCell>
+                      <TableCell>{getEmployeeId(employee)}</TableCell>
                       <TableCell>
-                        {employee.data.jobTitle?.toString() || employee.data.department?.toString() || "N/A"}
+                        {getEmployeePosition(employee)}
                       </TableCell>
-                      <TableCell>{getTemplateName(employee.templateId)}</TableCell>
+                      <TableCell>{getTemplateName(employee.templateId || employee.template_id)}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -369,9 +479,7 @@ function EmployeeList({ hideActions = false }: EmployeeListProps) {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => router.push(`/dashboard/generate?employee=${employee.id}`)}
-                            >
+                            <DropdownMenuItem onClick={() => router.push(`/dashboard/employees/${employee.id}?tab=cards`)}>
                               <Printer className="mr-2 h-4 w-4" />
                               Generate Card
                             </DropdownMenuItem>

@@ -4,14 +4,15 @@ import { useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { X, Upload } from "lucide-react"
 import { useDropzone } from "react-dropzone"
+import { cn } from "@/lib/utils"
 
 interface ImageUploadProps {
   value: string | null
   onChange: (value: string | null) => void
-  onRemove: () => void
+  className?: string
 }
 
-export function ImageUpload({ value, onChange, onRemove }: ImageUploadProps) {
+export function ImageUpload({ value, onChange, className }: ImageUploadProps) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       const file = acceptedFiles[0]
@@ -34,23 +35,35 @@ export function ImageUpload({ value, onChange, onRemove }: ImageUploadProps) {
     maxFiles: 1,
   })
 
+  const onRemove = () => {
+    // Set to null instead of removing to trigger proper state updates
+    onChange(null)
+  }
+
   if (value) {
     return (
-      <div className="relative border rounded-md overflow-hidden">
+      <div className={cn(
+        "relative h-full w-full group overflow-hidden",
+        className
+      )}>
         <img
           src={value}
-          alt="Preview"
-          className="w-full h-32 object-cover"
+          alt="Uploaded image"
+          className="h-full w-full object-cover"
         />
-        <Button
-          type="button"
-          variant="destructive"
-          size="icon"
-          className="absolute top-2 right-2 h-6 w-6 rounded-full"
-          onClick={onRemove}
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRemove()
+            }}
+          >
+            Remove
+          </Button>
+        </div>
       </div>
     )
   }
@@ -58,15 +71,15 @@ export function ImageUpload({ value, onChange, onRemove }: ImageUploadProps) {
   return (
     <div
       {...getRootProps()}
-      className={`
-        border-2 border-dashed rounded-md p-4 text-center cursor-pointer
-        hover:border-primary/50 transition-colors
-        ${isDragActive ? "border-primary bg-primary/5" : "border-muted"}
-      `}
+      className={cn(
+        "flex h-full w-full flex-col items-center justify-center cursor-pointer rounded-md border-2 border-dashed border-muted-foreground/25 p-4 transition-colors",
+        isDragActive ? "border-primary/50 bg-primary/5" : "hover:border-primary/50",
+        className
+      )}
     >
       <input {...getInputProps()} />
-      <Upload className="mx-auto h-6 w-6 text-muted-foreground" />
-      <p className="mt-2 text-sm text-muted-foreground">
+      <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
+      <p className="text-sm text-center text-muted-foreground">
         {isDragActive ? "Drop the image here" : "Drag & drop an image here, or click to select"}
       </p>
     </div>

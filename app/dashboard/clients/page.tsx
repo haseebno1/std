@@ -12,14 +12,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
-import { fetchClients, saveClient, deleteClient } from "@/lib/api"
+import { fetchClients, createClient, deleteClient } from "@/lib/api"
 import type { Client } from "@/lib/types"
 import { Plus, Users } from "lucide-react"
 import { PageHeader } from "@/components/ui/page-header"
 import { SkeletonGrid } from "@/components/ui/skeleton-card"
 import { EmptyState } from "@/components/ui/empty-state"
+import { supabase } from "@/lib/supabase"
+import { useRequireAuth } from "@/lib/auth"
 
 export default function ClientsPage() {
+  // Use the auth hook
+  useRequireAuth()
+
   const searchParams = useSearchParams()
   const router = useRouter()
   
@@ -31,7 +36,7 @@ export default function ClientsPage() {
   const [newClientName, setNewClientName] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [clients, setClients] = useState<Client[]>([])
-  
+
   // Load clients data
   useEffect(() => {
     const loadClients = async () => {
@@ -42,16 +47,22 @@ export default function ClientsPage() {
       } catch (error) {
         console.error("Error loading clients:", error)
         setIsLoading(false)
+        
+        // Only redirect on auth errors
+        if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+          router.push('/login')
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load clients",
+            variant: "destructive",
+          })
+        }
       }
     }
     
-    // Simulate loading delay
-    const timer = setTimeout(() => {
-      loadClients()
-    }, 1000)
-    
-    return () => clearTimeout(timer)
-  }, [])
+    loadClients()
+  }, [router])
   
   // Handle URL parameters
   useEffect(() => {
@@ -85,7 +96,7 @@ export default function ClientsPage() {
     }
 
     try {
-      await saveClient(currentClient)
+      await createClient(currentClient)
       setIsEditDialogOpen(false)
       toast({
         title: "Success",
@@ -117,11 +128,13 @@ export default function ClientsPage() {
 
     try {
       const newClient: Client = {
-        id: `client-${Date.now()}`,
+        id: crypto.randomUUID(),
         name: newClientName,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      await saveClient(newClient)
+      await createClient(newClient)
       setNewClientName("")
       setIsAddDialogOpen(false)
       toast({
@@ -131,13 +144,17 @@ export default function ClientsPage() {
       
       // Refresh the page
       router.refresh()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding client:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add client",
-        variant: "destructive",
-      })
+      if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+        router.push('/login')
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to add client",
+          variant: "destructive",
+        })
+      }
     }
   }
   

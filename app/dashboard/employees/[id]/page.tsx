@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { EmployeeForm } from "@/components/employees/employee-form"
 import { fetchEmployeeById } from "@/lib/api"
 import type { Employee } from "@/lib/types"
@@ -14,6 +14,8 @@ import { toast } from "@/hooks/use-toast"
 export default function EditEmployeePage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const tab = searchParams.get('tab') as "template" | "details" | "preview" | "cards" | null
   const employeeId = params.id as string
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,7 +28,6 @@ export default function EditEmployeePage() {
         setError(null)
 
         console.log("Page: Attempting to load employee with ID:", employeeId)
-        console.log("Page: Type of employeeId:", typeof employeeId)
 
         if (!employeeId) {
           throw new Error("No employee ID provided")
@@ -43,6 +44,7 @@ export default function EditEmployeePage() {
           console.log("Page: Creating default employee with ID:", employeeId)
           const defaultEmployee: Employee = {
             id: employeeId,
+            template_id: "template1", // Default to first template
             templateId: "template1", // Default to first template
             data: {
               fullName: "",
@@ -50,6 +52,8 @@ export default function EditEmployeePage() {
               department: "",
               photo: null,
             },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }
 
           setEmployee(defaultEmployee)
@@ -57,7 +61,7 @@ export default function EditEmployeePage() {
           toast({
             title: "Employee not found",
             description: "Created a new employee record instead",
-            variant: "warning",
+            variant: "default",
           })
         }
       } catch (error) {
@@ -74,7 +78,7 @@ export default function EditEmployeePage() {
       setError("No employee ID provided")
       setLoading(false)
     }
-  }, [employeeId])
+  }, [employeeId, tab])
 
   if (loading) {
     return (
@@ -101,6 +105,6 @@ export default function EditEmployeePage() {
     )
   }
 
-  return <EmployeeForm initialEmployee={employee} />
+  return employee ? <EmployeeForm initialEmployee={employee} initialTab={tab || undefined} /> : null
 }
 

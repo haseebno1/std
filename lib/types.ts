@@ -16,22 +16,42 @@ export interface FieldStyle {
 export interface CustomField {
   id: string
   name: string
-  type: "text" | "textarea" | "date" | "image"
+  type: string
   required: boolean
-  position: Position
-  style?: FieldStyle
   side: "front" | "back"
+  position: {
+    x: number
+    y: number
+  }
+  style?: {
+    fontSize?: number
+    fontWeight?: string | number
+    color?: string
+    fontFamily?: string
+    textAlign?: string
+    width?: number
+    height?: number
+  }
 }
 
 export interface Template {
   id: string
   name: string
-  clientId: string
-  brandId: string
-  frontImage: string
-  backImage?: string
+  client_id: string
+  brand_id: string
   layout: "horizontal" | "vertical"
-  customFields: CustomField[]
+  front_image?: string
+  back_image?: string
+  custom_fields: CustomField[]
+  customFields?: CustomField[]
+  clientId?: string
+  brandId?: string
+  frontImage?: string
+  backImage?: string
+  created_at: string
+  updated_at: string
+  clients?: Client
+  brands?: Brand
 }
 
 export interface EmployeeData {
@@ -40,46 +60,45 @@ export interface EmployeeData {
 
 export interface Employee {
   id: string
-  templateId: string
-  data: EmployeeData
+  template_id: string
+  templateId?: string
+  data: Record<string, any>
+  created_at: string
+  updated_at: string
+  templates?: Template
 }
 
 export interface Client {
   id: string
   name: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Brand {
   id: string
   name: string
-  clientId: string
+  client_id: string
+  created_at: string
+  updated_at: string
+  clients?: Client
 }
 
 export interface Activity {
   id: string
-  type: string
-  message: string
+  type: "create" | "update" | "delete"
+  entity_type: "client" | "brand" | "template" | "employee"
+  entity_id: string
+  entity_name: string
+  user_id: string
+  details?: string
   timestamp: string
-  userId?: string
 }
 
 export interface Settings {
-  general: {
-    companyName: string
-    defaultTemplate: string
-    cardSize: string
-    enableBatchProcessing: boolean
-  }
-  appearance: {
-    theme: string
-    primaryColor: string
-    logoUrl: string
-  }
-  notifications: {
-    emailNotifications: boolean
-    emailAddress: string
-    notifyOnCardGeneration: boolean
-    notifyOnTemplateChanges: boolean
-  }
+  id: number
+  theme: string
+  default_template_id?: string
+  updated_at: string
 }
 

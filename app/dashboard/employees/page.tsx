@@ -19,22 +19,18 @@ export default function EmployeesPage() {
   useEffect(() => {
     const loadEmployees = async () => {
       try {
-        const data = await fetchEmployees()
-        setEmployees(data)
-        setIsLoading(false)
+        const data = await fetchEmployees();
+        setEmployees(data);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Error loading employees:", error)
-        setIsLoading(false)
+        console.error("Error loading employees:", error);
+        setIsLoading(false);
       }
-    }
+    };
     
-    // Simulate loading delay
-    const timer = setTimeout(() => {
-      loadEmployees()
-    }, 1000)
-    
-    return () => clearTimeout(timer)
-  }, [])
+    // Load data only once when the component mounts
+    loadEmployees();
+  }, []);
   
   return (
     <div className="space-y-6">
@@ -73,7 +69,7 @@ export default function EmployeesPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <EmployeeList hideActions={true} />
+          <EmployeeList hideActions={true} initialEmployees={employees} />
         </motion.div>
       )}
     </div>

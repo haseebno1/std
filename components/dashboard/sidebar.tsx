@@ -15,8 +15,6 @@ import { cn } from "@/lib/utils"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: Home },
   { name: "Templates", href: "/dashboard/templates", icon: LayoutTemplate },
-  { name: "Generate Card", href: "/dashboard/generate", icon: Plus },
-  { name: "Card Preview", href: "/dashboard/cards/preview", icon: Eye },
   { name: "Batch Generator", href: "/dashboard/batch", icon: FileText },
   { name: "Clients", href: "/dashboard/clients", icon: Building2 },
   { name: "Brands", href: "/dashboard/brands", icon: Briefcase },

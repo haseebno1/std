@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form"
 import { motion } from "framer-motion"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import type { Template, Client, Brand } from "@/lib/types"
+import type { Template, Client, Brand, CustomField } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { 
@@ -18,18 +18,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TemplatePreview } from "@/components/templates/template-preview"
 import { ImageUpload } from "@/components/ui/image-upload"
 import { toast } from "@/components/ui/use-toast"
-import { Save, Trash, Download } from "lucide-react"
+import { Save, Trash, Download, ArrowLeft, ArrowRight } from "lucide-react"
 import { fetchClients, fetchBrands } from "@/lib/api"
-import { getDefaultTemplateSvgUrl } from "@/lib/utils"
+import { getTemplateSvgUrl } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
 
 const templateSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  clientId: z.string(),
-  brandId: z.string(),
+  client_id: z.string(),
+  brand_id: z.string(),
   layout: z.enum(["horizontal", "vertical"]),
-  frontImage: z.string(),
-  backImage: z.string().optional(),
+  front_image: z.string(),
+  back_image: z.string().optional(),
   // Add more fields as needed
 })
 
@@ -44,22 +44,28 @@ export function TemplateForm({
   const clientParam = searchParams.get('client')
   const brandParam = searchParams.get('brand')
   
-  const [preview, setPreview] = useState(false)
+  const [currentStep, setCurrentStep] = useState<"edit" | "preview">("edit")
   const [saving, setSaving] = useState(false)
   const [clients, setClients] = useState<Client[]>([])
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
   const [activeImageTab, setActiveImageTab] = useState("front")
+  const [customFields, setCustomFields] = useState<CustomField[]>(
+    initialTemplate?.custom_fields?.map(field => ({
+      ...field,
+      side: field.side as "front" | "back"
+    })) || []
+  )
   
   const form = useForm<z.infer<typeof templateSchema>>({
     resolver: zodResolver(templateSchema),
     defaultValues: initialTemplate || {
       name: "",
-      clientId: clientParam || "",
-      brandId: brandParam || "",
+      client_id: clientParam || "",
+      brand_id: brandParam || "",
       layout: "horizontal",
-      frontImage: getDefaultTemplateSvgUrl(),
-      backImage: "",
+      front_image: getTemplateSvgUrl("horizontal"),
+      back_image: "",
     },
   })
   
@@ -85,7 +91,7 @@ export function TemplateForm({
   
   // Filter brands based on selected client
   const filteredBrands = brands.filter(brand => 
-    !form.watch("clientId") || brand.clientId === form.watch("clientId")
+    !form.watch("client_id") || brand.client_id === form.watch("client_id")
   )
   
   const onSubmit = async (data: z.infer<typeof templateSchema>) => {
@@ -96,34 +102,139 @@ export function TemplateForm({
       const completeTemplate: Template = {
         ...(initialTemplate || {}),
         ...data,
-        id: initialTemplate?.id || `template-${Date.now()}`,
-        customFields: initialTemplate?.customFields || [],
+        // Don't generate an ID here - let the API do it
+        ...(initialTemplate?.id ? { id: initialTemplate.id } : {}),
+        // Ensure custom_fields from state is included
+        custom_fields: customFields,
+        customFields: customFields,
+        clientId: data.client_id,
+        brandId: data.brand_id,
+        frontImage: data.front_image,
+        backImage: data.back_image || "",
+        back_image: data.back_image || "",
+        created_at: initialTemplate?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }
+      
+      console.log("Submitting template with custom fields:", JSON.stringify(completeTemplate.custom_fields, null, 2));
       
       // Call external submit handler if provided
       if (externalSubmit) {
-        externalSubmit(completeTemplate)
+        await externalSubmit(completeTemplate)
+        
+        toast({
+          title: "Template saved",
+          description: "Your template has been saved successfully",
+          variant: "success",
+        })
+        
         return
       }
       
-      // Simulate API call if no external handler
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      toast({
-        title: "Template saved",
-        description: "Your template has been saved successfully",
-        variant: "success",
-      })
-    } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save template. Please try again.",
+        description: "No submit handler provided. Please try again.",
+        variant: "destructive",
+      })
+    } catch (error: any) {
+      console.error("Error saving template:", error)
+      
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save template. Please try again.",
         variant: "destructive",
       })
     } finally {
       setSaving(false)
     }
   }
+
+  const handleNextStep = async () => {
+    const isValid = await form.trigger()
+    if (!isValid) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setSaving(true)
+      
+      // Create a template object with current data
+      const templateData = form.getValues()
+      const completeTemplate: Template = {
+        ...(initialTemplate || {}),
+        ...templateData,
+        // Don't generate an ID here - let the API do it
+        ...(initialTemplate?.id ? { id: initialTemplate.id } : {}),
+        // Ensure custom_fields from state is included
+        custom_fields: customFields,
+        customFields: customFields,
+        clientId: templateData.client_id,
+        brandId: templateData.brand_id,
+        frontImage: templateData.front_image,
+        backImage: templateData.back_image || "",
+        back_image: templateData.back_image || "",
+        created_at: initialTemplate?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      
+      console.log("Next step with template custom fields:", JSON.stringify(completeTemplate.custom_fields, null, 2));
+      
+      // Save the data if an external submit handler is provided
+      if (externalSubmit) {
+        await externalSubmit(completeTemplate)
+      }
+      
+      // Move to the preview step
+      setCurrentStep("preview")
+      
+      toast({
+        title: "Design saved",
+        description: "Your template design has been saved. You can now preview it.",
+        variant: "success",
+      })
+    } catch (error: any) {
+      console.error("Error saving template:", error)
+      
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save template. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePreviousStep = () => {
+    setCurrentStep("edit")
+  }
+
+  // Fix the useEffect hook that updates the SVG template when the layout changes
+  useEffect(() => {
+    const currentLayout = form.watch("layout")
+    const currentFrontImage = form.watch("front_image")
+    const currentBackImage = form.watch("back_image")
+    
+    // Only update if the current image is an SVG template
+    if (currentFrontImage && (
+      currentFrontImage.includes("/horizontal-card.svg") || 
+      currentFrontImage.includes("/vertical-card.svg")
+    )) {
+      form.setValue("front_image", getTemplateSvgUrl(currentLayout))
+    }
+    
+    if (currentBackImage && (
+      currentBackImage.includes("/horizontal-card.svg") || 
+      currentBackImage.includes("/vertical-card.svg")
+    )) {
+      form.setValue("back_image", getTemplateSvgUrl(currentLayout))
+    }
+  }, [form, form.watch("layout")])
 
   return (
     <motion.div
@@ -148,14 +259,10 @@ export function TemplateForm({
         </div>
       </div>
       
-      <Tabs defaultValue="edit" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="edit">Edit</TabsTrigger>
-          <TabsTrigger value="preview">Preview</TabsTrigger>
-        </TabsList>
-        <TabsContent value="edit" className="space-y-4 pt-4">
+      {currentStep === "edit" ? (
+        <div className="space-y-4 pt-4">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form className="space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
@@ -178,7 +285,7 @@ export function TemplateForm({
                     
                     <FormField
                       control={form.control}
-                      name="clientId"
+                      name="client_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Client</FormLabel>
@@ -186,7 +293,7 @@ export function TemplateForm({
                             onValueChange={(value) => {
                               field.onChange(value)
                               // Reset brand when client changes
-                              form.setValue("brandId", "")
+                              form.setValue("brand_id", "")
                             }}
                             value={field.value || undefined}
                           >
@@ -195,7 +302,7 @@ export function TemplateForm({
                                 <SelectValue placeholder="Select client" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className="bg-popover">
                               {loading ? (
                                 <SelectItem value="loading" disabled>Loading clients...</SelectItem>
                               ) : clients.length === 0 ? (
@@ -216,24 +323,24 @@ export function TemplateForm({
                     
                     <FormField
                       control={form.control}
-                      name="brandId"
+                      name="brand_id"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Brand</FormLabel>
                           <Select
                             onValueChange={field.onChange}
                             value={field.value || undefined}
-                            disabled={!form.watch("clientId")}
+                            disabled={!form.watch("client_id")}
                           >
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select brand" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className="bg-popover">
                               {loading ? (
                                 <SelectItem value="loading" disabled>Loading brands...</SelectItem>
-                              ) : !form.watch("clientId") ? (
+                              ) : !form.watch("client_id") ? (
                                 <SelectItem value="none" disabled>Select a client first</SelectItem>
                               ) : filteredBrands.length === 0 ? (
                                 <SelectItem value="none" disabled>No brands available for this client</SelectItem>
@@ -258,7 +365,27 @@ export function TemplateForm({
                         <FormItem>
                           <FormLabel>Card Layout</FormLabel>
                           <Select
-                            onValueChange={field.onChange}
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              // Update SVG templates when layout changes
+                              const currentFrontImage = form.watch("front_image");
+                              const currentBackImage = form.watch("back_image");
+                              
+                              // Only update if the current image is an SVG template
+                              if (currentFrontImage && (
+                                currentFrontImage.includes("/horizontal-card.svg") || 
+                                currentFrontImage.includes("/vertical-card.svg")
+                              )) {
+                                form.setValue("front_image", getTemplateSvgUrl(value as "horizontal" | "vertical"));
+                              }
+                              
+                              if (currentBackImage && (
+                                currentBackImage.includes("/horizontal-card.svg") || 
+                                currentBackImage.includes("/vertical-card.svg")
+                              )) {
+                                form.setValue("back_image", getTemplateSvgUrl(value as "horizontal" | "vertical"));
+                              }
+                            }}
                             defaultValue={field.value}
                           >
                             <FormControl>
@@ -283,6 +410,7 @@ export function TemplateForm({
                     <CardTitle>Card Design</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className={`relative ${form.watch("layout") === "horizontal" ? "aspect-[1.586/1]" : "aspect-[0.63/1]"}`}>
                     <Tabs value={activeImageTab} onValueChange={setActiveImageTab} className="w-full">
                       <TabsList className="grid w-full grid-cols-2">
                         <TabsTrigger value="front">Front Side</TabsTrigger>
@@ -291,16 +419,46 @@ export function TemplateForm({
                       <TabsContent value="front" className="space-y-4">
                         <FormField
                           control={form.control}
-                          name="frontImage"
+                            name="front_image"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Front Image</FormLabel>
                               <FormControl>
+                                  <div className={`relative overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/25 ${form.watch("layout") === "horizontal" ? "aspect-[1.586/1]" : "aspect-[0.63/1]"}`}>
+                                    {field.value ? (
+                                      <div className="group relative h-full w-full">
+                                        <img
+                                          src={field.value}
+                                          alt="Front side"
+                                          className="h-full w-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                                          <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => field.onChange(getTemplateSvgUrl(form.watch("layout")))}
+                                          >
+                                            Replace
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => field.onChange("")}
+                                          >
+                                            Remove
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
                                 <ImageUpload
-                                  value={field.value}
+                                        value={field.value || null}
                                   onChange={field.onChange}
-                                  onRemove={() => field.onChange(getDefaultTemplateSvgUrl())}
+                                        className={form.watch("layout") === "horizontal" ? "aspect-[1.586/1]" : "aspect-[0.63/1]"}
                                 />
+                                    )}
+                                  </div>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -310,16 +468,46 @@ export function TemplateForm({
                       <TabsContent value="back" className="space-y-4">
                         <FormField
                           control={form.control}
-                          name="backImage"
+                            name="back_image"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Back Image</FormLabel>
                               <FormControl>
+                                  <div className={`relative overflow-hidden rounded-lg border-2 border-dashed border-muted-foreground/25 ${form.watch("layout") === "horizontal" ? "aspect-[1.586/1]" : "aspect-[0.63/1]"}`}>
+                                    {field.value ? (
+                                      <div className="group relative h-full w-full">
+                                        <img
+                                          src={field.value}
+                                          alt="Back side"
+                                          className="h-full w-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                                          <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => field.onChange(getTemplateSvgUrl(form.watch("layout")))}
+                                          >
+                                            Replace
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={() => field.onChange("")}
+                                          >
+                                            Remove
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
                                 <ImageUpload
-                                  value={field.value || ""}
+                                        value={field.value || null}
                                   onChange={field.onChange}
-                                  onRemove={() => field.onChange("")}
+                                        className={form.watch("layout") === "horizontal" ? "aspect-[1.586/1]" : "aspect-[0.63/1]"}
                                 />
+                                    )}
+                                  </div>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -327,61 +515,94 @@ export function TemplateForm({
                         />
                       </TabsContent>
                     </Tabs>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Custom Fields</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Add custom fields that will appear on the card</p>
-                  {/* Custom fields editor will go here */}
-                </CardContent>
-              </Card>
-              
-              <CardFooter className="flex justify-end gap-2 px-0">
-                <Button 
-                  type="submit" 
-                  disabled={saving}
-                  className="min-w-32"
-                >
-                  {saving ? (
-                    <>
-                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Template
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
             </form>
           </Form>
-        </TabsContent>
-        <TabsContent value="preview">
+        </div>
+      ) : (
           <Card className="w-full">
             <CardContent className="p-6">
               <TemplatePreview 
                 template={{
                   id: initialTemplate?.id || "preview",
                   name: form.watch("name"),
-                  clientId: form.watch("clientId"),
-                  brandId: form.watch("brandId"),
+                client_id: form.watch("client_id"),
+                brand_id: form.watch("brand_id"),
                   layout: form.watch("layout"),
-                  frontImage: form.watch("frontImage"),
-                  backImage: form.watch("backImage"),
-                  customFields: initialTemplate?.customFields || [],
+                front_image: form.watch("front_image") || getTemplateSvgUrl(form.watch("layout")),
+                back_image: form.watch("back_image") || "",
+                custom_fields: customFields,
+                customFields: customFields,
+                clientId: form.watch("client_id"),
+                brandId: form.watch("brand_id"),
+                frontImage: form.watch("front_image") || getTemplateSvgUrl(form.watch("layout")),
+                backImage: form.watch("back_image") || "",
+                created_at: initialTemplate?.created_at || new Date().toISOString(),
+                updated_at: initialTemplate?.updated_at || new Date().toISOString(),
                 }}
               />
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+      )}
+      
+      <div className="flex justify-between items-center gap-4">
+        {currentStep === "preview" ? (
+          <Button 
+            variant="outline" 
+            type="button"
+            onClick={handlePreviousStep}
+            className="px-6"
+          >
+            <ArrowLeft className="mr-2 h-5 w-5" />
+            Back to Edit
+          </Button>
+        ) : (
+          <div></div>
+        )}
+        
+        {currentStep === "edit" ? (
+          <Button 
+            type="button"
+            onClick={handleNextStep}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-6 text-lg ml-auto"
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <div className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Saving...
+              </>
+            ) : (
+              <>
+                Next Step
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button 
+            type="button"
+            disabled={saving}
+            onClick={form.handleSubmit(onSubmit)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-6 text-lg ml-auto"
+          >
+            {saving ? (
+              <>
+                <div className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-5 w-5" />
+                Save Template
+              </>
+            )}
+          </Button>
+        )}
+      </div>
     </motion.div>
   )
 }

@@ -1,0 +1,1 @@
+postgresql://postgres.ziwfvtivmwwisrdpzcoe:Pass2@Pass@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres

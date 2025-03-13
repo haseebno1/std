@@ -19,7 +19,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Plus, Search, MoreVertical, Edit, Trash2, Briefcase, Building2 } from "lucide-react"
-import { fetchBrands, fetchClients, saveBrand, deleteBrand } from "@/lib/api"
+import { fetchBrands, fetchClients, createBrand, deleteBrand } from "@/lib/api"
 import type { Brand, Client } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -98,12 +98,15 @@ function BrandList({ hideActions = false, clientFilter, hideClientColumn = false
     try {
       // Generate a unique ID using a more stable approach
       const brandToAdd: Brand = {
-        id: `brand-${newBrand.name.toLowerCase().replace(/\s+/g, '-')}-${Math.floor(Math.random() * 10000)}`,
+        id: crypto.randomUUID(),
         name: newBrand.name,
+        client_id: newBrand.clientId,
         clientId: newBrand.clientId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      await saveBrand(brandToAdd)
+      await createBrand(brandToAdd)
       setBrands([...brands, brandToAdd])
       setNewBrand({ name: "", clientId: "" })
       setIsAddDialogOpen(false)
@@ -132,7 +135,7 @@ function BrandList({ hideActions = false, clientFilter, hideClientColumn = false
     }
 
     try {
-      await saveBrand(currentBrand)
+      await createBrand(currentBrand)
       setBrands(brands.map((brand) => (brand.id === currentBrand.id ? currentBrand : brand)))
       setIsEditDialogOpen(false)
       toast({

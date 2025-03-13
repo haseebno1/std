@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import type { Template, CustomField, Position } from "@/lib/types"
-import { Plus, Move, Trash2, Image, Type, CalendarDays, AlignLeft, Save, Eye } from "lucide-react"
+import { Plus, Move, Trash2, Image, Type, CalendarDays, AlignLeft, Save, Eye, User } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { getDefaultTemplateSvgUrl } from "@/lib/utils"
 
@@ -25,13 +25,31 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
     initialTemplate || {
       id: `template-${Date.now()}`,
       name: "New Template",
+      client_id: "",
+      brand_id: "",
       clientId: "",
       brandId: "",
       frontImage: getDefaultTemplateSvgUrl(),
+      front_image: getDefaultTemplateSvgUrl(),
+      back_image: "",
+      backImage: "",
       layout: "horizontal",
+      custom_fields: [],
       customFields: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     },
   )
+
+  // Helper function to get a default style object
+  const getDefaultFieldStyle = (type: string = "text") => ({
+    fontSize: type === "name" ? 18 : 16,
+    fontWeight: type === "name" ? 600 : 400,
+    fontFamily: "Arial",
+    color: "#000000",
+    textAlign: "left",
+    ...(type === "image" && { width: 100, height: 100 }),
+  });
 
   const [activeTab, setActiveTab] = useState<"front" | "back">("front")
   const [selectedField, setSelectedField] = useState<string | null>(null)
@@ -43,7 +61,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
     type: "text",
     required: false,
     position: { x: 100, y: 100 },
-    side: "front",
+    side: activeTab as "front" | "back",
+    style: getDefaultFieldStyle(),
   })
 
   const frontCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -72,7 +91,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
     // Use a safer approach to load template image
-    const templateImageSrc = side === "front" ? template.frontImage : template.backImage || ""
+    const templateImageSrc = side === "front" ? template.frontImage || "" : template.backImage || ""
 
     // Only proceed with image loading on the client side
     if (typeof window !== "undefined") {
@@ -89,7 +108,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
         ctx.drawImage(templateImage, 0, 0, canvas.width, canvas.height)
 
         // Draw fields on the canvas
-        const fieldsForSide = template.customFields.filter((field) => field.side === side)
+        const fieldsForSide = (template.customFields || []).filter((field) => field.side === side)
 
         fieldsForSide.forEach(async (field) => {
           const value = isPreviewMode ? getPreviewValue(field) : field.name
@@ -132,9 +151,22 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
             }
           } else {
             // Handle text fields
-            ctx.font = `${field.style?.fontWeight || ""} ${field.style?.fontSize || "16px"} ${field.style?.fontFamily || "Arial"}`
+            const fontSizeString = typeof field.style?.fontSize === 'number' 
+              ? `${field.style.fontSize}px` 
+              : (field.style?.fontSize || '16px');
+            
+            const fontWeightString = field.style?.fontWeight?.toString() || '400';
+            const fontFamily = field.style?.fontFamily || 'Arial';
+            
+            try {
+              ctx.font = `${fontWeightString} ${fontSizeString} ${fontFamily}`;
+            } catch (error) {
+              console.error('Error setting font:', error);
+              ctx.font = '16px Arial'; // Fallback to a safe default
+            }
+            
             ctx.fillStyle = field.style?.color || "#000000"
-            ctx.textAlign = (field.style?.textAlign as CanvasTextAlign) || "left"
+            ctx.textAlign = field.style?.textAlign === "center" ? "center" : field.style?.textAlign === "right" ? "right" : "left"
 
             if (isPreviewMode) {
               // In preview mode, show placeholder text
@@ -194,6 +226,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
         return "01/01/2025"
       case "image":
         return null
+      case "name":
+        return "John Doe"
       default:
         return field.name
     }
@@ -208,7 +242,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
     const y = (e.clientY - rect.top) * (canvas.height / rect.height)
 
     // Check if clicked on a field
-    const fieldsForSide = template.customFields.filter((field) => field.side === activeTab)
+    const fieldsForSide = (template.customFields || []).filter((field) => field.side === activeTab)
 
     for (const field of fieldsForSide) {
       const fieldX = field.position.x
@@ -247,23 +281,14 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
 
     // Update field position
     setTemplate((prev) => {
-      const updatedFields = prev.customFields.map((field) => {
-        if (field.id === dragFieldId.current) {
-          return {
-            ...field,
-            position: {
-              x: field.position.x + dx,
-              y: field.position.y + dy,
-            },
-          }
-        }
-        return field
-      })
-
+      const updatedCustomFields = (prev.customFields || []).map((f) =>
+        f.id === dragFieldId.current ? { ...f, position: { ...f.position, x: f.position.x + dx, y: f.position.y + dy } } : f
+      );
       return {
         ...prev,
-        customFields: updatedFields,
-      }
+        customFields: updatedCustomFields,
+        custom_fields: updatedCustomFields,
+      };
     })
   }
 
@@ -283,7 +308,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
     }
 
     // Check if ID already exists
-    if (template.customFields.some((field) => field.id === newField.id)) {
+    if ((template.customFields || []).some((field) => field.id === newField.id)) {
       toast({
         title: "Error",
         description: "Field ID must be unique",
@@ -292,24 +317,25 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
       return
     }
 
-    setTemplate((prev) => ({
-      ...prev,
-      customFields: [
-        ...prev.customFields,
-        {
-          ...newField,
-          id: newField.id.trim(),
-          side: activeTab,
-          style: {
-            fontFamily: "Arial",
-            fontSize: "16px",
-            color: "#000000",
-            textAlign: "left",
-            ...(newField.type === "image" ? { width: 100, height: 100 } : {}),
-          },
-        },
-      ],
-    }))
+    setTemplate((prev) => {
+      const newFieldWithStyle = {
+        ...newField,
+        id: newField.id.trim(),
+        side: activeTab,
+        style: getDefaultFieldStyle(newField.type),
+      };
+      
+      const updatedFields = [
+        ...(prev.customFields || []),
+        newFieldWithStyle,
+      ];
+      
+      return {
+        ...prev,
+        customFields: updatedFields,
+        custom_fields: updatedFields,
+      };
+    });
 
     // Reset new field form
     setNewField({
@@ -318,8 +344,9 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
       type: "text",
       required: false,
       position: { x: 100, y: 100 },
-      side: activeTab,
-    })
+      side: activeTab as "front" | "back",
+      style: getDefaultFieldStyle(),
+    });
 
     setIsAddingField(false)
 
@@ -332,7 +359,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
   const handleDeleteField = (fieldId: string) => {
     setTemplate((prev) => ({
       ...prev,
-      customFields: prev.customFields.filter((field) => field.id !== fieldId),
+      customFields: (prev.customFields || []).filter((field) => field.id !== fieldId),
+      custom_fields: (prev.custom_fields || []).filter((field) => field.id !== fieldId),
     }))
 
     if (selectedField === fieldId) {
@@ -355,7 +383,24 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
       return
     }
 
-    onSave(template)
+    // Ensure both snake_case and camelCase properties are set
+    const updatedTemplate = {
+      ...template,
+      // Ensure both naming conventions are present
+      client_id: template.clientId || template.client_id,
+      brand_id: template.brandId || template.brand_id,
+      front_image: template.frontImage || template.front_image,
+      back_image: template.backImage || template.back_image,
+      custom_fields: template.customFields || template.custom_fields || [],
+      // And in reverse
+      clientId: template.client_id || template.clientId,
+      brandId: template.brand_id || template.brandId, 
+      frontImage: template.front_image || template.frontImage,
+      backImage: template.back_image || template.backImage,
+      customFields: template.custom_fields || template.customFields || [],
+    }
+
+    onSave(updatedTemplate)
 
     toast({
       title: "Success",
@@ -368,11 +413,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
       setTemplate((prev) => ({
         ...prev,
         frontImage: url,
+        front_image: url,
       }))
     } else {
       setTemplate((prev) => ({
         ...prev,
         backImage: url,
+        back_image: url,
       }))
     }
   }
@@ -387,6 +434,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
         return <CalendarDays className="h-4 w-4" />
       case "image":
         return <Image className="h-4 w-4" />
+      case "name":
+        return <User className="h-4 w-4" />
       default:
         return <Type className="h-4 w-4" />
     }
@@ -506,6 +555,9 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add Custom Field</DialogTitle>
+                  <DialogDescription>
+                    Define a new custom field for your template.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="grid gap-4 grid-cols-2">
@@ -543,6 +595,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           <SelectItem value="text">Text</SelectItem>
                           <SelectItem value="textarea">Text Area</SelectItem>
                           <SelectItem value="date">Date</SelectItem>
+                          <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="image">Image</SelectItem>
                         </SelectContent>
                       </Select>
@@ -600,13 +653,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
           </div>
 
           <div className="border rounded-md">
-            {template.customFields.filter((field) => field.side === activeTab).length === 0 ? (
+            {(template.customFields || []).filter((field) => field.side === activeTab).length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 No fields added to this side yet. Click "Add Field" to create one.
               </div>
             ) : (
               <div className="divide-y">
-                {template.customFields
+                {(template.customFields || [])
                   .filter((field) => field.side === activeTab)
                   .map((field) => (
                     <div
@@ -656,7 +709,7 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
           {selectedField && !isPreviewMode && (
             <div className="border rounded-md p-4 space-y-4">
               <h4 className="font-medium">Field Properties</h4>
-              {template.customFields
+              {(template.customFields || [])
                 .filter((field) => field.id === selectedField)
                 .map((field) => (
                   <div key={field.id} className="space-y-4">
@@ -668,12 +721,16 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           value={field.position.x}
                           onChange={(e) => {
                             const value = Number(e.target.value)
-                            setTemplate((prev) => ({
-                              ...prev,
-                              customFields: prev.customFields.map((f) =>
-                                f.id === field.id ? { ...f, position: { ...f.position, x: value } } : f,
-                              ),
-                            }))
+                            setTemplate((prev) => {
+                              const updatedCustomFields = (prev.customFields || []).map((f) =>
+                                f.id === field.id ? { ...f, position: { ...f.position, x: value } } : f
+                              );
+                              return {
+                                ...prev,
+                                customFields: updatedCustomFields,
+                                custom_fields: updatedCustomFields,
+                              };
+                            });
                           }}
                         />
                       </div>
@@ -684,12 +741,16 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           value={field.position.y}
                           onChange={(e) => {
                             const value = Number(e.target.value)
-                            setTemplate((prev) => ({
-                              ...prev,
-                              customFields: prev.customFields.map((f) =>
-                                f.id === field.id ? { ...f, position: { ...f.position, y: value } } : f,
-                              ),
-                            }))
+                            setTemplate((prev) => {
+                              const updatedCustomFields = (prev.customFields || []).map((f) =>
+                                f.id === field.id ? { ...f, position: { ...f.position, y: value } } : f
+                              );
+                              return {
+                                ...prev,
+                                customFields: updatedCustomFields,
+                                custom_fields: updatedCustomFields,
+                              };
+                            });
                           }}
                         />
                       </div>
@@ -704,9 +765,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                             value={field.style?.width || 100}
                             onChange={(e) => {
                               const value = Number(e.target.value)
-                              setTemplate((prev) => ({
-                                ...prev,
-                                customFields: prev.customFields.map((f) =>
+                              setTemplate((prev) => {
+                                const updatedCustomFields = (prev.customFields || []).map((f) =>
                                   f.id === field.id
                                     ? {
                                         ...f,
@@ -716,8 +776,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                         },
                                       }
                                     : f,
-                                ),
-                              }))
+                                );
+                                return {
+                                  ...prev,
+                                  customFields: updatedCustomFields,
+                                  custom_fields: updatedCustomFields,
+                                };
+                              });
                             }}
                           />
                         </div>
@@ -728,9 +793,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                             value={field.style?.height || 100}
                             onChange={(e) => {
                               const value = Number(e.target.value)
-                              setTemplate((prev) => ({
-                                ...prev,
-                                customFields: prev.customFields.map((f) =>
+                              setTemplate((prev) => {
+                                const updatedCustomFields = (prev.customFields || []).map((f) =>
                                   f.id === field.id
                                     ? {
                                         ...f,
@@ -740,8 +804,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                         },
                                       }
                                     : f,
-                                ),
-                              }))
+                                );
+                                return {
+                                  ...prev,
+                                  customFields: updatedCustomFields,
+                                  custom_fields: updatedCustomFields,
+                                };
+                              });
                             }}
                           />
                         </div>
@@ -755,9 +824,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           <Select
                             value={field.style?.fontFamily || "Arial"}
                             onValueChange={(value) => {
-                              setTemplate((prev) => ({
-                                ...prev,
-                                customFields: prev.customFields.map((f) =>
+                              setTemplate((prev) => {
+                                const updatedCustomFields = (prev.customFields || []).map((f) =>
                                   f.id === field.id
                                     ? {
                                         ...f,
@@ -767,8 +835,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                         },
                                       }
                                     : f,
-                                ),
-                              }))
+                                );
+                                return {
+                                  ...prev,
+                                  customFields: updatedCustomFields,
+                                  custom_fields: updatedCustomFields,
+                                };
+                              });
                             }}
                           >
                             <SelectTrigger>
@@ -787,22 +860,28 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           <div>
                             <Label>Font Size</Label>
                             <Select
-                              value={field.style?.fontSize || "16px"}
+                              value={field.style?.fontSize ? `${field.style.fontSize}px` : "16px"}
                               onValueChange={(value) => {
-                                setTemplate((prev) => ({
-                                  ...prev,
-                                  customFields: prev.customFields.map((f) =>
+                                // Convert "16px" to 16
+                                const fontSize = parseInt(value);
+                                setTemplate((prev) => {
+                                  const updatedCustomFields = (prev.customFields || []).map((f) =>
                                     f.id === field.id
                                       ? {
                                           ...f,
                                           style: {
                                             ...f.style,
-                                            fontSize: value,
+                                            fontSize,
                                           },
                                         }
                                       : f,
-                                  ),
-                                }))
+                                  );
+                                  return {
+                                    ...prev,
+                                    customFields: updatedCustomFields,
+                                    custom_fields: updatedCustomFields,
+                                  };
+                                });
                               }}
                             >
                               <SelectTrigger>
@@ -821,22 +900,30 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           <div>
                             <Label>Font Weight</Label>
                             <Select
-                              value={field.style?.fontWeight || "normal"}
+                              value={typeof field.style?.fontWeight === 'number' ? 
+                                     (field.style.fontWeight === 700 ? "bold" : "normal") : 
+                                     (field.style?.fontWeight || "normal")}
                               onValueChange={(value) => {
-                                setTemplate((prev) => ({
-                                  ...prev,
-                                  customFields: prev.customFields.map((f) =>
+                                // Convert "bold" to 700, "normal" to 400
+                                const fontWeight = value === "bold" ? 700 : 400;
+                                setTemplate((prev) => {
+                                  const updatedCustomFields = (prev.customFields || []).map((f) =>
                                     f.id === field.id
                                       ? {
                                           ...f,
                                           style: {
                                             ...f.style,
-                                            fontWeight: value,
+                                            fontWeight,
                                           },
                                         }
                                       : f,
-                                  ),
-                                }))
+                                  );
+                                  return {
+                                    ...prev,
+                                    customFields: updatedCustomFields,
+                                    custom_fields: updatedCustomFields,
+                                  };
+                                });
                               }}
                             >
                               <SelectTrigger>
@@ -855,9 +942,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                           <Select
                             value={field.style?.textAlign || "left"}
                             onValueChange={(value) => {
-                              setTemplate((prev) => ({
-                                ...prev,
-                                customFields: prev.customFields.map((f) =>
+                              setTemplate((prev) => {
+                                const updatedCustomFields = (prev.customFields || []).map((f) =>
                                   f.id === field.id
                                     ? {
                                         ...f,
@@ -867,8 +953,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                         },
                                       }
                                     : f,
-                                ),
-                              }))
+                                );
+                                return {
+                                  ...prev,
+                                  customFields: updatedCustomFields,
+                                  custom_fields: updatedCustomFields,
+                                };
+                              });
                             }}
                           >
                             <SelectTrigger>
@@ -889,9 +980,8 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                               type="color"
                               value={field.style?.color || "#000000"}
                               onChange={(e) => {
-                                setTemplate((prev) => ({
-                                  ...prev,
-                                  customFields: prev.customFields.map((f) =>
+                                setTemplate((prev) => {
+                                  const updatedCustomFields = (prev.customFields || []).map((f) =>
                                     f.id === field.id
                                       ? {
                                           ...f,
@@ -901,17 +991,21 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                           },
                                         }
                                       : f,
-                                  ),
-                                }))
+                                  );
+                                  return {
+                                    ...prev,
+                                    customFields: updatedCustomFields,
+                                    custom_fields: updatedCustomFields,
+                                  };
+                                });
                               }}
                               className="w-12 h-10 p-1"
                             />
                             <Input
                               value={field.style?.color || "#000000"}
                               onChange={(e) => {
-                                setTemplate((prev) => ({
-                                  ...prev,
-                                  customFields: prev.customFields.map((f) =>
+                                setTemplate((prev) => {
+                                  const updatedCustomFields = (prev.customFields || []).map((f) =>
                                     f.id === field.id
                                       ? {
                                           ...f,
@@ -921,8 +1015,13 @@ export function TemplateEditor({ initialTemplate, onSave }: TemplateEditorProps)
                                           },
                                         }
                                       : f,
-                                  ),
-                                }))
+                                  );
+                                  return {
+                                    ...prev,
+                                    customFields: updatedCustomFields,
+                                    custom_fields: updatedCustomFields,
+                                  };
+                                });
                               }}
                             />
                           </div>

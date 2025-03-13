@@ -12,8 +12,9 @@ import { TemplateEditor } from "@/components/template-editor"
 import { CardPreview } from "@/components/card-preview"
 import { toast } from "@/components/ui/use-toast"
 import type { Template } from "@/lib/types"
-import { saveTemplate } from "@/lib/api"
+import { createTemplate } from "@/lib/api"
 import { getDefaultTemplateSvg, getDefaultTemplateSvgUrl } from "@/lib/utils"
+import { handleSupabaseError } from "@/lib/supabase"
 
 export default function NewTemplatePage() {
   const router = useRouter()
@@ -41,7 +42,28 @@ export default function NewTemplatePage() {
     
     try {
       setIsSubmitting(true)
-      await saveTemplate(template)
+      
+      // Ensure the template object has both custom_fields and customFields properties
+      // Do NOT include an ID - let the API generate a fresh one
+      const { id, ...templateWithoutId } = template;
+      
+      const templateToSave = {
+        ...templateWithoutId,
+        custom_fields: template.customFields || template.custom_fields || [],
+        customFields: template.custom_fields || template.customFields || [],
+        client_id: template.clientId || template.client_id,
+        brand_id: template.brandId || template.brand_id,
+        clientId: template.client_id || template.clientId,
+        brandId: template.brand_id || template.brandId,
+        front_image: template.frontImage || template.front_image,
+        back_image: template.backImage || template.back_image,
+        frontImage: template.front_image || template.frontImage,
+        backImage: template.back_image || template.backImage,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+      
+      await createTemplate(templateToSave)
       toast({
         title: "Success",
         description: "Template saved successfully",
@@ -51,7 +73,7 @@ export default function NewTemplatePage() {
       console.error("Error saving template:", error)
       toast({
         title: "Error",
-        description: "Failed to save template",
+        description: handleSupabaseError(error) || "Failed to save template",
         variant: "destructive",
       })
     } finally {

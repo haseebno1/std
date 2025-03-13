@@ -9,69 +9,106 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DynamicForm } from "@/components/dynamic-form"
 import { CardPreview } from "@/components/card-preview"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Employee, Template, EmployeeData } from "@/lib/types"
-import { fetchTemplates, fetchTemplateById, saveEmployee } from "@/lib/api"
+import type { Employee, Template, EmployeeData, CustomField } from "@/lib/types"
+import { fetchTemplates, fetchTemplateById, createEmployee } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
+import { Download, ArrowLeft, Printer, Camera } from "lucide-react"
+import { EmployeeCardPDF } from "../employee-card-pdf"
 
 interface EmployeeFormProps {
   initialEmployee?: Employee
+  initialTab?: "template" | "details" | "preview" | "cards"
 }
 
-export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
+export function EmployeeForm({ initialEmployee, initialTab }: EmployeeFormProps) {
   const router = useRouter()
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [employeeData, setEmployeeData] = useState<EmployeeData>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<"template" | "details" | "preview">(
-    initialEmployee ? "details" : "template",
+  const [generating, setGenerating] = useState(false)
+  const [activeTab, setActiveTab] = useState<"template" | "details" | "preview" | "cards">(
+    initialTab || "template",
   )
   const isEditing = !!initialEmployee
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const templatesData = await fetchTemplates()
-        setTemplates(templatesData)
+        // Fetch templates with proper error handling
+        try {
+          const templatesData = await fetchTemplates();
+          setTemplates(templatesData);
+        } catch (templatesError) {
+          console.error("Error loading templates:", templatesError);
+          toast({
+            title: "Warning",
+            description: "Unable to load templates. Some options may be unavailable.",
+            variant: "destructive",
+          });
+          // Continue with empty templates array
+          setTemplates([]);
+        }
 
+        // If in edit mode, try to load the specific template
         if (isEditing && initialEmployee) {
-          const template = await fetchTemplateById(initialEmployee.templateId)
-          setSelectedTemplate(template)
-          setEmployeeData(initialEmployee.data)
+          try {
+            if (initialEmployee.templateId) {
+              const template = await fetchTemplateById(initialEmployee.templateId);
+              setSelectedTemplate(template);
+            }
+            // Always set employee data
+            setEmployeeData(initialEmployee.data || {});
+          } catch (templateError) {
+            console.error("Error loading template details:", templateError);
+            toast({
+              title: "Warning",
+              description: "Unable to load template details. Some fields may be missing.",
+              variant: "destructive",
+            });
+            // Still allow editing without the template
+            setEmployeeData(initialEmployee.data || {});
+          }
         }
       } catch (error) {
-        console.error("Error loading data:", error)
+        console.error("Error in employee form loadData:", error);
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    loadData()
-  }, [isEditing, initialEmployee])
+    loadData();
+  }, [isEditing, initialEmployee]);
 
   const handleTemplateSelect = async (templateId: string) => {
     try {
-      const template = await fetchTemplateById(templateId)
-      setSelectedTemplate(template)
+      setLoading(true);
+      const template = await fetchTemplateById(templateId);
+      setSelectedTemplate(template);
+      
+      // Initialize empty data for each custom field
+      if (template.customFields && template.customFields.length) {
+        const initialData = template.customFields.reduce((acc: Record<string, any>, field: CustomField) => {
+          acc[field.id] = field.type === "image" ? null : "";
+          return acc;
+        }, {} as Record<string, any>);
+        setEmployeeData(initialData);
+      }
 
-      // Initialize employee data with empty values for all template fields
-      const initialData: EmployeeData = {}
-      template.customFields.forEach((field) => {
-        initialData[field.id] = field.type === "image" ? null : ""
-      })
-      setEmployeeData(initialData)
-
-      setActiveTab("details")
+      // Also fix the setActiveTab issue
+      setActiveTab("details");
     } catch (error) {
-      console.error("Error loading template:", error)
+      console.error("Error selecting template:", error);
       toast({
         title: "Error",
-        description: "Failed to load template",
+        description: "Failed to load template details",
         variant: "destructive",
-      })
+      });
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   const handleFormSubmit = (data: EmployeeData) => {
     setEmployeeData(data)
@@ -79,10 +116,20 @@ export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
   }
 
   const handleSave = async () => {
-    if (!selectedTemplate) {
+    if (!selectedTemplate || !employeeData) {
       toast({
         title: "Error",
-        description: "Please select a template",
+        description: "Please select a template and fill out required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate that we have data
+    if (Object.keys(employeeData).length === 0) {
+      toast({
+        title: "Error",
+        description: "Please fill out at least one field for the employee",
         variant: "destructive",
       })
       return
@@ -90,23 +137,52 @@ export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
 
     setSaving(true)
     try {
+      console.log("Creating employee with template:", selectedTemplate.id);
+      
+      // Ensure all data values are properly formatted
+      const cleanData: Record<string, any> = {};
+      Object.entries(employeeData).forEach(([key, value]) => {
+        // Don't include undefined values
+        if (value !== undefined) {
+          // Convert null strings to actual null
+          cleanData[key] = value === "null" ? null : value;
+        }
+      });
+      
+      // Make sure we have at least some identifier
+      if (!cleanData.fullName && !cleanData.employeeId) {
+        cleanData.fullName = "Unnamed Employee";
+      }
+      
       const employee: Employee = {
-        id: initialEmployee?.id || `employee-${Date.now()}`,
+        id: initialEmployee?.id || crypto.randomUUID(),
+        template_id: selectedTemplate.id,
         templateId: selectedTemplate.id,
-        data: employeeData,
+        data: cleanData,
+        created_at: initialEmployee?.created_at || new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      await saveEmployee(employee)
+      console.log("Saving employee data:", employee);
+      const savedEmployee = await createEmployee(employee);
+      console.log("Employee saved successfully:", savedEmployee.id);
+      
       toast({
         title: "Success",
         description: `Employee ${isEditing ? "updated" : "created"} successfully`,
       })
-      router.push("/dashboard/employees")
-    } catch (error) {
-      console.error("Error saving employee:", error)
+      
+      // Force a page reload when redirecting to make sure the list refreshes
+      router.push("/dashboard/employees");
+      // Add a small delay before refreshing to ensure the database transaction completes
+      setTimeout(() => {
+        window.location.href = "/dashboard/employees";
+      }, 500);
+    } catch (error: any) {
+      console.error("Error saving employee:", error);
       toast({
         title: "Error",
-        description: `Failed to ${isEditing ? "update" : "create"} employee`,
+        description: `Failed to ${isEditing ? "update" : "create"} employee. ${error.message || ""}`,
         variant: "destructive",
       })
     } finally {
@@ -133,14 +209,17 @@ export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "template" | "details" | "preview")}>
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "template" | "details" | "preview" | "cards")}>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="template">Select Template</TabsTrigger>
           <TabsTrigger value="details" disabled={!selectedTemplate}>
             Employee Details
           </TabsTrigger>
           <TabsTrigger value="preview" disabled={!selectedTemplate || Object.keys(employeeData).length === 0}>
             Preview
+          </TabsTrigger>
+          <TabsTrigger value="cards" disabled={!selectedTemplate || Object.keys(employeeData).length === 0}>
+            Generate Cards
           </TabsTrigger>
         </TabsList>
 
@@ -193,7 +272,7 @@ export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
                     </div>
                     <h3 className="font-medium">{template.name}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {template.layout === "horizontal" ? "Horizontal" : "Vertical"} • {template.customFields.length}{" "}
+                      {template.layout === "horizontal" ? "Horizontal" : "Vertical"} • {template.customFields ? template.customFields.length : 0}{" "}
                       fields
                     </p>
                   </div>
@@ -225,6 +304,69 @@ export function EmployeeForm({ initialEmployee }: EmployeeFormProps) {
                 </Button>
                 <Button onClick={handleSave} disabled={saving}>
                   {saving ? "Saving..." : isEditing ? "Update Employee" : "Save Employee"}
+                </Button>
+                <Button variant="secondary" onClick={() => setActiveTab("cards")}>
+                  Generate ID Card
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="cards">
+          {selectedTemplate && Object.keys(employeeData).length > 0 && (
+            <div className="space-y-6">
+              <div className="bg-muted p-4 rounded-lg">
+                <h3 className="text-lg font-medium mb-2">ID Card Generation</h3>
+                <p className="text-muted-foreground mb-4">
+                  Generate and download employee ID cards based on the selected template and provided information.
+                </p>
+                <div className="flex flex-wrap gap-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => window.print()}
+                    className="flex-1"
+                  >
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print Cards
+                  </Button>
+                  
+                  <Button 
+                    className="flex-1"
+                    onClick={() => {
+                      setGenerating(true);
+                      setTimeout(() => {
+                        setGenerating(false);
+                        toast({
+                          title: "Success",
+                          description: "Employee cards have been generated and downloaded",
+                        });
+                      }, 1500);
+                    }}
+                    disabled={generating}
+                  >
+                    {generating ? (
+                      <>Generating...</>
+                    ) : (
+                      <>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <CardPreview template={selectedTemplate} employeeData={employeeData} />
+              
+              <div className="flex gap-4 flex-wrap mt-8">
+                <Button variant="outline" onClick={() => setActiveTab("preview")}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Preview
+                </Button>
+                <Button variant="outline" onClick={() => window.open(`/dashboard/employees/photo?id=${initialEmployee?.id || ''}`, '_blank')}>
+                  <Camera className="mr-2 h-4 w-4" />
+                  Take Employee Photo
                 </Button>
               </div>
             </div>

@@ -1,628 +1,641 @@
+import { supabase } from './supabase'
 import type { Client, Brand, Template, Employee, Activity, Settings } from "./types"
 
-// Mock data for demonstration purposes
-const mockClients: Client[] = [
-  { id: "client1", name: "Acme Corporation" },
-  { id: "client2", name: "Globex Industries" },
-  { id: "client3", name: "Initech" },
-]
+// Client operations
+export async function fetchClients() {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .order('created_at', { ascending: false })
 
-const mockBrands: Brand[] = [
-  { id: "brand1", name: "Acme Professional", clientId: "client1" },
-  { id: "brand2", name: "Acme Standard", clientId: "client1" },
-  { id: "brand3", name: "Globex Enterprise", clientId: "client2" },
-  { id: "brand4", name: "Globex Basic", clientId: "client2" },
-  { id: "brand5", name: "Initech Premium", clientId: "client3" },
-]
-
-// Ensure we have templates with predictable IDs
-const mockTemplates: Template[] = [
-  {
-    id: "template1",
-    name: "Professional ID Card",
-    clientId: "client1",
-    brandId: "brand1",
-    frontImage: "/placeholder.svg?height=300&width=500",
-    backImage: "/placeholder.svg?height=300&width=500",
-    layout: "horizontal",
-    customFields: [
-      {
-        id: "fullName",
-        name: "Full Name",
-        type: "text",
-        required: true,
-        position: { x: 150, y: 150 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "18px",
-          fontWeight: "bold",
-          color: "#000000",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "employeeId",
-        name: "Employee ID",
-        type: "text",
-        required: true,
-        position: { x: 150, y: 180 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "14px",
-          color: "#333333",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "department",
-        name: "Department",
-        type: "text",
-        required: true,
-        position: { x: 150, y: 210 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "14px",
-          color: "#333333",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "photo",
-        name: "Employee Photo",
-        type: "image",
-        required: true,
-        position: { x: 50, y: 50 },
-        style: {
-          width: 100,
-          height: 100,
-        },
-        side: "front",
-      },
-      {
-        id: "issueDate",
-        name: "Issue Date",
-        type: "date",
-        required: true,
-        position: { x: 150, y: 240 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "12px",
-          color: "#666666",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "emergencyContact",
-        name: "Emergency Contact",
-        type: "text",
-        required: false,
-        position: { x: 150, y: 100 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "14px",
-          color: "#333333",
-          textAlign: "left",
-        },
-        side: "back",
-      },
-      {
-        id: "address",
-        name: "Address",
-        type: "textarea",
-        required: false,
-        position: { x: 150, y: 150 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "12px",
-          color: "#333333",
-          textAlign: "left",
-        },
-        side: "back",
-      },
-    ],
-  },
-  {
-    id: "template2",
-    name: "Standard ID Card",
-    clientId: "client1",
-    brandId: "brand2",
-    frontImage: "/placeholder.svg?height=500&width=300",
-    layout: "vertical",
-    customFields: [
-      {
-        id: "fullName",
-        name: "Full Name",
-        type: "text",
-        required: true,
-        position: { x: 150, y: 350 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "18px",
-          fontWeight: "bold",
-          color: "#000000",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "jobTitle",
-        name: "Job Title",
-        type: "text",
-        required: true,
-        position: { x: 150, y: 380 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "14px",
-          color: "#333333",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "photo",
-        name: "Employee Photo",
-        type: "image",
-        required: true,
-        position: { x: 100, y: 100 },
-        style: {
-          width: 200,
-          height: 200,
-        },
-        side: "front",
-      },
-    ],
-  },
-  {
-    id: "template3",
-    name: "Enterprise Badge",
-    clientId: "client2",
-    brandId: "brand3",
-    frontImage: "/placeholder.svg?height=300&width=500",
-    backImage: "/placeholder.svg?height=300&width=500",
-    layout: "horizontal",
-    customFields: [
-      {
-        id: "fullName",
-        name: "Full Name",
-        type: "text",
-        required: true,
-        position: { x: 250, y: 150 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "18px",
-          fontWeight: "bold",
-          color: "#000000",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "accessLevel",
-        name: "Access Level",
-        type: "text",
-        required: true,
-        position: { x: 250, y: 180 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "14px",
-          color: "#333333",
-          textAlign: "center",
-        },
-        side: "front",
-      },
-      {
-        id: "photo",
-        name: "Employee Photo",
-        type: "image",
-        required: true,
-        position: { x: 50, y: 100 },
-        style: {
-          width: 150,
-          height: 150,
-        },
-        side: "front",
-      },
-      {
-        id: "securityInfo",
-        name: "Security Information",
-        type: "textarea",
-        required: false,
-        position: { x: 150, y: 150 },
-        style: {
-          fontFamily: "Arial",
-          fontSize: "12px",
-          color: "#333333",
-          textAlign: "left",
-        },
-        side: "back",
-      },
-    ],
-  },
-  // Add more templates with different ID formats to handle various cases
-  {
-    id: "1",
-    name: "Basic ID Card",
-    clientId: "client1",
-    brandId: "brand1",
-    frontImage: "/placeholder.svg?height=300&width=500",
-    layout: "horizontal",
-    customFields: [],
-  },
-  {
-    id: "2",
-    name: "Simple Badge",
-    clientId: "client2",
-    brandId: "brand3",
-    frontImage: "/placeholder.svg?height=300&width=500",
-    layout: "vertical",
-    customFields: [],
-  },
-  {
-    id: "3",
-    name: "Visitor Pass",
-    clientId: "client3",
-    brandId: "brand5",
-    frontImage: "/placeholder.svg?height=300&width=500",
-    layout: "horizontal",
-    customFields: [],
-  },
-]
-
-const mockEmployees: Employee[] = [
-  {
-    id: "employee1",
-    templateId: "template1",
-    data: {
-      fullName: "John Doe",
-      employeeId: "12345",
-      department: "Engineering",
-      photo: "/placeholder.svg?height=100&width=100",
-      issueDate: new Date(),
-    },
-  },
-  {
-    id: "employee2",
-    templateId: "template2",
-    data: {
-      fullName: "Jane Smith",
-      jobTitle: "Software Engineer",
-      photo: "/placeholder.svg?height=200&width=200",
-    },
-  },
-]
-
-const mockActivities: Activity[] = [
-  {
-    id: "activity1",
-    type: "template",
-    message: "Template 'Professional ID Card' was created",
-    timestamp: new Date().toISOString(),
-  },
-  {
-    id: "activity2",
-    type: "employee",
-    message: "Employee 'John Doe' was added",
-    timestamp: new Date().toISOString(),
-  },
-]
-
-const mockSettings: Settings = {
-  general: {
-    companyName: "Your Company",
-    defaultTemplate: "template1",
-    cardSize: "standard",
-    enableBatchProcessing: true,
-  },
-  appearance: {
-    theme: "light",
-    primaryColor: "#0070f3",
-    logoUrl: "/placeholder.svg?height=100&width=200",
-  },
-  notifications: {
-    emailNotifications: true,
-    emailAddress: "admin@example.com",
-    notifyOnCardGeneration: true,
-    notifyOnTemplateChanges: false,
-  },
+  if (error) throw error
+  return data || []
 }
 
-// Simulated API calls with delay to mimic real API behavior
-export async function fetchClients(): Promise<Client[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockClients)
-    }, 500)
-  })
+export async function fetchClientById(id: string) {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-export async function fetchBrands(clientId?: string): Promise<Brand[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const filteredBrands = clientId ? mockBrands.filter((brand) => brand.clientId === clientId) : mockBrands
-      resolve(filteredBrands)
-    }, 500)
-  })
+export async function createClient(client: Omit<Client, 'id'>) {
+  const { data, error } = await supabase
+    .from('clients')
+    .insert([client])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-export async function fetchTemplates(clientId?: string, brandId?: string): Promise<Template[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let filteredTemplates = mockTemplates
-      if (clientId) {
-        filteredTemplates = filteredTemplates.filter((template) => template.clientId === clientId)
-      }
-      if (brandId) {
-        filteredTemplates = filteredTemplates.filter((template) => template.brandId === brandId)
-      }
-      resolve(filteredTemplates)
-    }, 500)
-  })
+export async function updateClient(id: string, client: Partial<Client>) {
+  const { data, error } = await supabase
+    .from('clients')
+    .update(client)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-// Completely rewritten fetchTemplateById function with more robust ID matching and fallback
-export async function fetchTemplateById(templateId: string): Promise<Template> {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      // Enhanced debugging
-      console.log("API: Fetching template with ID:", templateId)
-      console.log("API: Type of templateId:", typeof templateId)
+export async function deleteClient(id: string) {
+  const { error } = await supabase
+    .from('clients')
+    .delete()
+    .eq('id', id)
 
-      if (!templateId) {
-        console.error("API: Invalid template ID (empty)")
-        reject(new Error("Invalid template ID"))
-        return
-      }
+  if (error) throw error
+}
 
-      // Normalize the ID - remove any non-alphanumeric characters and convert to lowercase
-      const normalizedId = templateId
-        .toString()
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .toLowerCase()
-      console.log("API: Normalized ID:", normalizedId)
+// Brand operations
+export async function fetchBrands(clientId?: string) {
+  let query = supabase
+    .from('brands')
+    .select('*, clients(*)')
+    .order('created_at', { ascending: false })
 
-      // Try many different variations of the ID to find a match
-      const possibleIds = [
-        templateId,
-        `template${templateId}`,
-        templateId.replace(/^template/i, ""),
-        templateId.trim(),
-        normalizedId,
-        `template${normalizedId}`,
-        // Try numeric variations if the ID might be numeric
-        isNaN(Number(templateId)) ? null : templateId.toString(),
-        isNaN(Number(templateId)) ? null : Number(templateId).toString(),
-      ].filter(Boolean) // Remove null values
+  if (clientId) {
+    query = query.eq('client_id', clientId)
+  }
 
-      console.log("API: Trying possible ID variations:", possibleIds)
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
 
-      // Log all available template IDs for debugging
-      console.log(
-        "API: Available template IDs:",
-        mockTemplates.map((t) => t.id),
-      )
+export async function fetchBrandById(id: string) {
+  const { data, error } = await supabase
+    .from('brands')
+    .select('*, clients(*)')
+    .eq('id', id)
+    .single()
 
-      // Try to find the template with any of the possible IDs
-      for (const id of possibleIds) {
-        const template = mockTemplates.find((t) => {
-          // Try exact match
-          if (t.id === id) return true
+  if (error) throw error
+  return data
+}
 
-          // Try case-insensitive match
-          if (id && t.id.toLowerCase() === id.toLowerCase()) return true
+export async function createBrand(brand: Omit<Brand, 'id'>) {
+  const { data, error } = await supabase
+    .from('brands')
+    .insert([brand])
+    .select()
+    .single()
 
-          // Try with/without 'template' prefix
-          if (id && t.id.replace(/^template/i, "") === id.replace(/^template/i, "")) return true
+  if (error) throw error
+  return data
+}
 
-          return false
-        })
+export async function updateBrand(id: string, brand: Partial<Brand>) {
+  const { data, error } = await supabase
+    .from('brands')
+    .update(brand)
+    .eq('id', id)
+    .select()
+    .single()
 
-        if (template) {
-          console.log("API: Found template with ID variation:", id)
-          resolve(template)
-          return
+  if (error) throw error
+  return data
+}
+
+export async function deleteBrand(id: string) {
+  const { error } = await supabase
+    .from('brands')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Template operations
+export async function fetchTemplates(clientId?: string, brandId?: string) {
+  try {
+    let query = supabase
+      .from('templates')
+      .select('*, clients(*), brands(*)')
+      .order('created_at', { ascending: false })
+
+    if (clientId) {
+      query = query.eq('client_id', clientId)
+    }
+    if (brandId) {
+      query = query.eq('brand_id', brandId)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    
+    // Ensure each template has both naming conventions and parse safely
+    const enrichedData = data?.map(template => {
+      try {
+        // Handle custom_fields safely to avoid JSON parsing errors
+        let customFields = [];
+        try {
+          if (typeof template.custom_fields === 'string') {
+            customFields = JSON.parse(template.custom_fields);
+          } else if (Array.isArray(template.custom_fields)) {
+            customFields = template.custom_fields;
+          } else if (Array.isArray(template.customFields)) {
+            customFields = template.customFields;
+          }
+        } catch (parseError) {
+          console.error("Error parsing custom_fields:", parseError);
+          customFields = [];
         }
+        
+        return {
+          ...template,
+          // Add camelCase variants if they don't exist
+          clientId: template.clientId || template.client_id,
+          brandId: template.brandId || template.brand_id,
+          frontImage: template.frontImage || template.front_image,
+          backImage: template.backImage || template.back_image,
+          customFields: customFields,
+          custom_fields: customFields
+        };
+      } catch (itemError) {
+        console.error("Error processing template:", itemError);
+        // Return a minimal valid template
+        return {
+          id: template.id,
+          name: template.name || "Unknown Template",
+          client_id: template.client_id,
+          brand_id: template.brand_id,
+          customFields: [],
+          custom_fields: [],
+          layout: template.layout || "horizontal",
+          created_at: template.created_at,
+          updated_at: template.updated_at
+        };
       }
+    }) || []
+    
+    return enrichedData
+  } catch (error) {
+    console.error("fetchTemplates error:", error);
+    throw error;
+  }
+}
 
-      // FALLBACK: If we still can't find the template, return the first template as a fallback
-      if (mockTemplates.length > 0) {
-        console.log("API: Using fallback template (first available)")
-        resolve(mockTemplates[0])
-        return
+export async function fetchTemplateById(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from('templates')
+      .select('*, clients(*), brands(*)')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    
+    // Process custom fields safely
+    let customFields = [];
+    try {
+      if (typeof data.custom_fields === 'string') {
+        customFields = JSON.parse(data.custom_fields);
+      } else if (Array.isArray(data.custom_fields)) {
+        customFields = data.custom_fields;
+      } else if (Array.isArray(data.customFields)) {
+        customFields = data.customFields;
       }
+    } catch (parseError) {
+      console.error("Error parsing custom_fields in template:", parseError);
+      customFields = [];
+    }
+    
+    // Return enriched template with both naming conventions
+    return {
+      ...data,
+      clientId: data.clientId || data.client_id,
+      brandId: data.brandId || data.brand_id,
+      frontImage: data.frontImage || data.front_image,
+      backImage: data.backImage || data.back_image,
+      customFields: customFields,
+      custom_fields: customFields
+    }
+  } catch (error) {
+    console.error("fetchTemplateById error:", error);
+    throw error;
+  }
+}
 
-      // If there are no templates at all (very unlikely), create a default one
-      console.log("API: Creating default template as last resort")
-      const defaultTemplate: Template = {
-        id: templateId,
-        name: "Default Template",
-        clientId: "client1",
-        brandId: "brand1",
-        frontImage: "/placeholder.svg?height=300&width=500",
-        layout: "horizontal",
-        customFields: [],
+export async function createTemplate(template: Template | Omit<Template, 'id'>) {
+  // Create a copy of template without the relationship fields that don't exist in the database
+  // Also remove any existing ID to avoid primary key conflicts
+  const { clients, brands, id, ...templateWithoutRelationsAndId } = template as any;
+  
+  // Always generate a fresh UUID for new templates
+  const templateId = crypto.randomUUID();
+  
+  // Prepare the database-compatible template object
+  const dbTemplate = {
+    ...templateWithoutRelationsAndId,
+    id: templateId,
+    // Ensure we have both naming conventions in the database
+    client_id: template.client_id || template.clientId,
+    brand_id: template.brand_id || template.brandId,
+    front_image: template.front_image || template.frontImage,
+    back_image: template.back_image || template.backImage,
+    // Ensure custom_fields is a valid JSONB array
+    custom_fields: template.custom_fields || template.customFields || [],
+    // Add camelCase variants for the frontend
+    clientId: template.client_id || template.clientId,
+    brandId: template.brand_id || template.brandId,
+    frontImage: template.front_image || template.frontImage,
+    backImage: template.back_image || template.backImage,
+    customFields: template.custom_fields || template.customFields || [],
+    // Ensure timestamps are set
+    created_at: 'created_at' in template ? template.created_at : new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log("Creating template with new ID:", templateId);
+  console.log("Template object structure:", Object.keys(dbTemplate));
+  console.log("Saving template with custom fields:", JSON.stringify(dbTemplate.custom_fields, null, 2));
+
+  try {
+  const { data, error } = await supabase
+    .from('templates')
+      .insert([dbTemplate])
+    .select()
+      .single();
+
+    if (error) {
+      console.error("Supabase error:", error);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      console.error("Error details:", error.details);
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    console.error("Exception during template creation:", error);
+    throw error;
+  }
+}
+
+export async function updateTemplate(id: string, template: Partial<Template>) {
+  // Remove relationship fields that don't exist in the database
+  const { clients, brands, ...templateWithoutRelations } = template;
+  
+  // Prepare the database-compatible template object
+  const dbTemplate = {
+    ...templateWithoutRelations,
+    // Ensure we have both naming conventions in the database
+    ...(template.client_id || template.clientId ? {
+      client_id: template.client_id || template.clientId,
+      clientId: template.client_id || template.clientId,
+    } : {}),
+    ...(template.brand_id || template.brandId ? {
+      brand_id: template.brand_id || template.brandId,
+      brandId: template.brand_id || template.brandId,
+    } : {}),
+    ...(template.front_image || template.frontImage ? {
+      front_image: template.front_image || template.frontImage,
+      frontImage: template.front_image || template.frontImage,
+    } : {}),
+    ...(template.back_image || template.backImage ? {
+      back_image: template.back_image || template.backImage,
+      backImage: template.back_image || template.backImage,
+    } : {}),
+    // Ensure custom_fields is properly handled
+    ...(template.custom_fields || template.customFields ? {
+      custom_fields: template.custom_fields || template.customFields || [],
+      customFields: template.custom_fields || template.customFields || [],
+    } : {}),
+    // Always update the updated_at timestamp
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log("Updating template with ID:", id);
+  console.log("Template object structure:", Object.keys(dbTemplate));
+  console.log("Updating template with custom fields:", JSON.stringify(dbTemplate.custom_fields, null, 2));
+
+  try {
+  const { data, error } = await supabase
+    .from('templates')
+      .update(dbTemplate)
+    .eq('id', id)
+    .select()
+      .single();
+
+    if (error) {
+      console.error("Supabase error:", error);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+      console.error("Error details:", error.details);
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    console.error("Exception during template update:", error);
+    throw error;
+  }
+}
+
+export async function deleteTemplate(id: string) {
+  const { error } = await supabase
+    .from('templates')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+// Employee operations
+export async function fetchEmployees(templateId?: string) {
+  console.log("Fetching employees...", templateId ? `with templateId: ${templateId}` : "all");
+
+  try {
+    let query = supabase
+      .from('employees')
+      .select('*, templates(*)')
+      .order('created_at', { ascending: false });
+
+    if (templateId) {
+      query = query.eq('template_id', templateId);
+    }
+
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error("Error fetching employees:", error);
+      throw error;
+    }
+    
+    console.log(`Fetched ${data?.length || 0} employees`);
+    
+    if (data && data.length > 0) {
+      console.log("Sample employee data:", JSON.stringify(data[0].data, null, 2).substring(0, 200) + "...");
+    }
+    
+    // Ensure each employee has both naming conventions and valid data
+    const enrichedData = data?.map(employee => {
+      // Make sure data is an object, not null
+      if (!employee.data || typeof employee.data !== 'object') {
+        employee.data = {};
       }
-
-      // Add this template to our mock data for future reference
-      mockTemplates.push(defaultTemplate)
-
-      resolve(defaultTemplate)
-    }, 500)
-  })
+      
+      return {
+        ...employee,
+        // Add camelCase variants if they don't exist
+        templateId: employee.templateId || employee.template_id,
+        // Ensure data is always an object even if database returns null
+        data: employee.data || {}
+      };
+    }) || [];
+    
+    return enrichedData;
+  } catch (error) {
+    console.error("Error fetching employees:", error);
+    throw error;
+  }
 }
 
-export async function fetchEmployeeById(employeeId: string): Promise<Employee> {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const employee = mockEmployees.find((employee) => employee.id === employeeId)
-      if (employee) {
-        resolve(employee)
-      } else {
-        reject(new Error("Employee not found"))
+export async function fetchEmployeeById(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*, templates(*)')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error("Error fetching employee by ID:", error);
+      throw error;
+    }
+    
+    // Ensure data exists and is properly formatted
+    if (!data) {
+      throw new Error(`Employee with ID ${id} not found`);
+    }
+    
+    // Make sure data is an object, not null
+    if (!data.data || typeof data.data !== 'object') {
+      data.data = {};
+    }
+    
+    // Add templateId for convenience
+    return {
+      ...data,
+      templateId: data.templateId || data.template_id,
+      // Ensure data is always an object even if database returns null
+      data: data.data || {}
+    };
+  } catch (error) {
+    console.error(`Error fetching employee with ID ${id}:`, error);
+    throw error;
+  }
+}
+
+export async function createEmployee(employee: any) {
+  // Extract what we need for the database (only valid DB columns)
+  // Very important - only include fields that exist in the database schema
+  const { templateId, ...rest } = employee;
+  
+  // Generate a UUID if not provided or ensure it's in the correct format
+  const employeeId = employee.id || crypto.randomUUID();
+  
+  // Make sure data is properly formatted as JSON for storage
+  let formattedData = employee.data;
+  
+  // Handle null, undefined, or non-object data
+  if (!formattedData || typeof formattedData !== 'object') {
+    console.warn("Employee data is missing or invalid, initializing empty object");
+    formattedData = {};
+  }
+  
+  // Prepare the database-compatible employee object with only valid columns
+  const dbEmployee = {
+    ...rest,
+    id: employeeId,
+    // Ensure we have the snake_case naming required by the database
+    template_id: templateId || employee.template_id,
+    // Ensure data is formatted correctly for JSONB column
+    data: formattedData,
+    // Ensure timestamps are set
+    created_at: employee.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log("Creating employee with ID:", employeeId);
+  console.log("Creating employee with template_id:", dbEmployee.template_id);
+  console.log("Employee data keys:", Object.keys(formattedData || {}));
+  console.log("Employee data sample:", JSON.stringify(formattedData, null, 2).substring(0, 200) + "...");
+  
+  try {
+    // First check if an employee with this ID already exists
+    const { data: existingEmployee } = await supabase
+      .from('employees')
+      .select('id')
+      .eq('id', employeeId)
+      .maybeSingle();
+      
+    if (existingEmployee) {
+      console.log(`Employee with ID ${employeeId} already exists, updating...`);
+      // Update instead of insert
+      const { data, error } = await supabase
+        .from('employees')
+        .update(dbEmployee)
+        .eq('id', employeeId)
+        .select()
+        .single();
+        
+      if (error) {
+        console.error("Supabase error during update:", error);
+        throw error;
       }
-    }, 500)
-  })
-}
+      
+      console.log("Employee updated successfully:", data.id);
+      // Add back the camelCase property for frontend use
+      return {
+        ...data,
+        templateId: data.template_id
+      };
+    } else {
+      // Insert new record
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([dbEmployee])
+        .select()
+        .single();
 
-export async function fetchTemplatesCount(): Promise<number> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockTemplates.length)
-    }, 500)
-  })
-}
-
-export async function fetchClientsCount(): Promise<number> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockClients.length)
-    }, 500)
-  })
-}
-
-export async function fetchBrandsCount(): Promise<number> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockBrands.length)
-    }, 500)
-  })
-}
-
-export async function fetchEmployeesCount(): Promise<number> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockEmployees.length)
-    }, 500)
-  })
-}
-
-export async function fetchRecentActivity(): Promise<Activity[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockActivities)
-    }, 500)
-  })
-}
-
-export async function deleteTemplate(templateId: string): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate deletion
-      console.log(`Template with ID ${templateId} deleted`)
-      resolve()
-    }, 500)
-  })
-}
-
-export async function saveTemplate(template: Template): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate saving
-      console.log("Template saved:", template)
-
-      // In a real app, we would update the mockTemplates array here
-      // For this demo, let's add the template to mockTemplates if it doesn't exist
-      const existingIndex = mockTemplates.findIndex((t) => t.id === template.id)
-      if (existingIndex >= 0) {
-        mockTemplates[existingIndex] = template
-      } else {
-        mockTemplates.push(template)
+      if (error) {
+        console.error("Supabase error during insert:", error);
+        console.error("Error code:", error.code);
+        console.error("Error message:", error.message);
+        console.error("Error details:", error.details);
+        throw error;
       }
-
-      resolve()
-    }, 500)
-  })
+      
+      console.log("Employee created successfully:", data.id);
+      console.log("Returned data from database:", JSON.stringify(data, null, 2));
+      // Add back the camelCase property for frontend use
+      return {
+        ...data,
+        templateId: data.template_id
+      };
+    }
+  } catch (error) {
+    console.error("Detailed error during employee creation:", error);
+    throw error;
+  }
 }
 
-export async function saveClient(client: Client): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate saving
-      console.log("Client saved:", client)
-      resolve()
-    }, 500)
-  })
+export async function updateEmployee(id: string, employee: Partial<Employee>) {
+  // Extract what we need for the database (only valid DB columns)
+  // Very important - only include fields that exist in the database schema
+  const { templateId, ...rest } = employee as any;
+  
+  // Prepare the database-compatible employee object with only valid columns
+  const dbEmployee = {
+    ...rest,
+    // If template_id is being updated, ensure we use the correct name
+    ...(templateId ? { template_id: templateId } : {})
+  };
+
+  console.log("Updating employee with ID:", id);
+
+  try {
+  const { data, error } = await supabase
+    .from('employees')
+      .update(dbEmployee)
+    .eq('id', id)
+    .select()
+      .single();
+
+    if (error) {
+      console.error("Supabase error:", error);
+      throw error;
+    }
+    
+    // Add back the camelCase property for frontend use
+    return {
+      ...data,
+      templateId: data.template_id
+    };
+  } catch (error) {
+    console.error("Detailed error:", error);
+    throw error;
+  }
 }
 
-export async function deleteClient(clientId: string): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate deletion
-      console.log(`Client with ID ${clientId} deleted`)
-      resolve()
-    }, 500)
-  })
+export async function deleteEmployee(id: string) {
+  const { error } = await supabase
+    .from('employees')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
 
-export async function saveBrand(brand: Brand): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate saving
-      console.log("Brand saved:", brand)
-      resolve()
-    }, 500)
-  })
+// Activity operations
+export async function fetchActivities(limit: number = 10) {
+  const { data, error } = await supabase
+    .from('activities')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
 }
 
-export async function deleteBrand(brandId: string): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate deletion
-      console.log(`Brand with ID ${brandId} deleted`)
-      resolve()
-    }, 500)
-  })
+export async function createActivity(activity: Omit<Activity, 'id'>) {
+  const { data, error } = await supabase
+    .from('activities')
+    .insert([{
+      ...activity,
+      user_id: (await supabase.auth.getUser()).data.user?.id
+    }])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-export async function fetchEmployees(): Promise<Employee[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockEmployees)
-    }, 500)
-  })
+// Settings operations
+export async function fetchSettings(): Promise<Settings> {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-export async function deleteEmployee(employeeId: string): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate deletion
-      console.log(`Employee with ID ${employeeId} deleted`)
-      resolve()
-    }, 500)
-  })
+export async function updateSettings(settings: Partial<Settings>) {
+  const { data, error } = await supabase
+    .from('settings')
+    .update(settings)
+    .eq('id', 1)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
 
-export async function saveEmployee(employee: Employee): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate saving
-      console.log("Employee saved:", employee)
-      resolve()
-    }, 500)
-  })
-}
+export async function saveSettings(settings: Partial<Settings>) {
+  const { data, error } = await supabase
+    .from('settings')
+    .update(settings)
+    .eq('id', 1)
+    .select()
+    .single()
 
-export async function generateBatchCards(templateId: string, employeeIds: string[]): Promise<string[]> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate batch card generation
-      const fileNames = employeeIds.map((employeeId) => `card_${employeeId}.pdf`)
-      console.log(`Generated batch cards for template ${templateId} and employees ${employeeIds.join(", ")}`)
-      resolve(fileNames)
-    }, 1000)
-  })
-}
-
-export async function saveSettings(settings: Settings): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate saving settings
-      console.log("Settings saved:", settings)
-      resolve()
-    }, 500)
-  })
+  if (error) {
+    console.error("Error saving settings:", error);
+    throw error;
+  }
+  return data;
 }
 

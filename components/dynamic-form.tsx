@@ -48,10 +48,16 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
     template.customFields.reduce((acc, field) => {
       if (field.type === "image") {
         acc[field.id] = z.string().nullable()
+      } else if (field.type === "name") {
+        acc[field.id] = z.string().min(2, "Name must be at least 2 characters")
       } else if (field.type === "textarea") {
-        acc[field.id] = z.string().min(1, "This field is required")
+        acc[field.id] = field.required 
+          ? z.string().min(1, "This field is required")
+          : z.string().optional()
       } else {
-        acc[field.id] = z.string().min(1, "This field is required")
+        acc[field.id] = field.required 
+          ? z.string().min(1, "This field is required") 
+          : z.string().optional()
       }
       return acc
     }, {} as { [key: string]: z.ZodType<any> })
@@ -109,7 +115,30 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
   }
 
   const handleSubmit = (data: z.infer<typeof formSchema>) => {
-    onSubmit(data)
+    console.log("Dynamic form submitting data:", JSON.stringify(data, null, 2));
+    
+    // Check for empty or null values
+    const dataKeys = Object.keys(data);
+    if (dataKeys.length === 0) {
+      console.warn("Warning: No data fields found in the form submission");
+    } else {
+      console.log(`Form has ${dataKeys.length} fields`);
+      
+      // Check for any empty values
+      let emptyFields = 0;
+      dataKeys.forEach(key => {
+        if (data[key] === null || data[key] === undefined || data[key] === '') {
+          console.warn(`Field '${key}' has empty value`);
+          emptyFields++;
+        }
+      });
+      
+      if (emptyFields > 0) {
+        console.warn(`${emptyFields} out of ${dataKeys.length} fields are empty`);
+      }
+    }
+    
+    onSubmit(data);
   }
 
   // Group fields by side (front/back)
@@ -150,6 +179,13 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
                               value={formField.value}
                               onChange={formField.onChange}
                               onRemove={() => formField.onChange(null)}
+                            />
+                          ) : field.type === "name" ? (
+                            <Input
+                              {...formField}
+                              type="text"
+                              placeholder="Enter full name"
+                              className="font-medium"
                             />
                           ) : (
                             <Input
@@ -193,6 +229,13 @@ export function DynamicForm({ template, initialData, onSubmit }: DynamicFormProp
                               value={formField.value}
                               onChange={formField.onChange}
                               onRemove={() => formField.onChange(null)}
+                            />
+                          ) : field.type === "name" ? (
+                            <Input
+                              {...formField}
+                              type="text"
+                              placeholder="Enter full name"
+                              className="font-medium"
                             />
                           ) : (
                             <Input

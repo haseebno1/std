@@ -18,10 +18,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Plus, Search, MoreVertical, Edit, Trash2, Building2 } from "lucide-react"
-import { fetchClients, saveClient, deleteClient } from "@/lib/api"
+import { fetchClients, createClient, deleteClient } from "@/lib/api"
 import type { Client } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 interface ClientListProps {
   hideActions?: boolean;
@@ -42,17 +43,27 @@ function ClientList({ hideActions = false }: ClientListProps) {
   useEffect(() => {
     const loadClients = async () => {
       try {
+        setLoading(true)
         const data = await fetchClients()
         setClients(data)
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error loading clients:", error)
+        if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+          router.push('/login')
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load clients",
+            variant: "destructive",
+          })
+        }
       } finally {
         setLoading(false)
       }
     }
 
     loadClients()
-  }, [])
+  }, [router])
 
   const filteredClients = clients.filter((client) => client.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
@@ -68,11 +79,13 @@ function ClientList({ hideActions = false }: ClientListProps) {
 
     try {
       const newClient: Client = {
-        id: `client-${Date.now()}`,
+        id: crypto.randomUUID(),
         name: newClientName,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
 
-      await saveClient(newClient)
+      await createClient(newClient)
       setClients([...clients, newClient])
       setNewClientName("")
       setIsAddDialogOpen(false)
@@ -80,13 +93,17 @@ function ClientList({ hideActions = false }: ClientListProps) {
         title: "Success",
         description: "Client added successfully",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding client:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add client",
-        variant: "destructive",
-      })
+      if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+        router.push('/login')
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to add client",
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -101,7 +118,7 @@ function ClientList({ hideActions = false }: ClientListProps) {
     }
 
     try {
-      await saveClient(currentClient)
+      await createClient(currentClient)
       setClients(clients.map((client) => (client.id === currentClient.id ? currentClient : client)))
       setIsEditDialogOpen(false)
       toast({
